@@ -1,0 +1,27 @@
+[
+  {
+    "name": "Python-3.14-visionOS-support.b13.tar.gz",
+    "version": "3.14-b13",
+    "url": "https://github.com/beeware/Python-Apple-support/releases/download/3.14-b13/Python-3.14-visionOS-support.b13.tar.gz",
+    "sha256": "c85c8c007092eb45a8737b31578c043fe3d5762ad98ed7a42426ac2d3bf7f22a"
+  },
+  {
+    "name": "yt_dlp-2026.10.21-py3-none-any.whl",
+    "version": "2026.10.21",
+    "url": "https://files.pythonhosted.org/packages/b7/75/ae700ddc7e0b1095fd06cf7e251627dcf4cafcaff460cce92cdc08023b13/yt_dlp-2026.10.21-py3-none-any.whl",
+    "sha256": "94a3a3e2c423129d0bbd2f1be000c4171fa1226c29e251c84aff868f2851c247"
+  },
+  {
+    "name": "certifi-2026.10.23-py3-none-any.whl",
+    "version": "2026.10.23",
+    "url": "https://files.pythonhosted.org/packages/32/d1/a3652fe2c19134d0d15922177821d863cbd7e842d53a21bbe7e8e3a1b5ac/certifi-2026.10.23-py3-none-any.whl",
+    "sha256": "e9b54de76e530bb6cf0ccd036787103acb58fd42ba930ea8bf948ddbaa2f61d1"
+  },
+  {
+    "name": "ffmpeg-9.0.2.tar.xz",
+    "version": "9.0.2",
+    "url": "https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz",
+    "sha256": "8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e",
+    "license": "LGPL-2.1-or-later"
+  }
+]

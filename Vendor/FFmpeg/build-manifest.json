@@ -1,0 +1,13 @@
+{
+  "version": "9.0.2",
+  "sourceSHA256": "8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e",
+  "license": "LGPL-2.1-or-later",
+  "GPL": false,
+  "nonfree": false,
+  "network": false,
+  "runtime": "file-only MPEG-TS to MP4, no re-encoding",
+  "platforms": [
+    "xros",
+    "xrsimulator"
+  ]
+}

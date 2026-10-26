@@ -1,0 +1,28 @@
+.build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.DS_Store
+Fixtures/generated/
+Config/Local.xcconfig
+TestResults/*.xcresult
+__pycache__/
+*.pyc
+VisionStream-source.zip
+VisionStream-VisionPro-unsigned.xcarchive.zip
+LocalMedia/
+Config/Publication.json
+Config/Publication.xcconfig
+Config/AppStoreLocal.xcconfig
+Submission/Prepared/
+Config/Generated/
+
+# Nested native test result bundles are generated, not GitHub source.
+**/*.xcresult/
+
+# Local reports can expose browsing hosts; do not commit them to the public repo.
+TestResults/
+VisionStream-public-source.zip
+
+# Restore the pinned extractor dependency with the setup script.
+Vendor/ExtractorPackages/

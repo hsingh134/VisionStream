@@ -1,0 +1,3 @@
+#!/bin/bash
+echo Can\'t run xros binary
+exit 1

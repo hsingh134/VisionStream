@@ -1,0 +1,3 @@
+// Copy to Local.xcconfig (gitignored), then enter values from your Apple developer account.
+DEVELOPMENT_TEAM = YOURTEAMID
+PRODUCT_BUNDLE_IDENTIFIER = com.yourname.VisionStream

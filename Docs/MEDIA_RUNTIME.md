@@ -1,0 +1,15 @@
+# Local HLS remux runtime
+
+VisionStreamMedia is a separately dynamically linked FFmpeg 9.0.2 library under LGPL 2.1 or later. Its full corresponding unmodified source archive is supplied in `Vendor/FFmpeg/ffmpeg-9.0.2.tar.xz`; SHA-256 is `8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e`. The project's C adapter is in `Vendor/MediaSource`. Licence text is shipped alongside the source and in the application.
+
+## Rebuild or replace
+
+Run `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer python3 Scripts/build_media_runtime.py`. This builds arm64 visionOS 26+ and Simulator slices from the supplied source, creating `Vendor/VisionStreamMedia.xcframework`. It requires Xcode's visionOS SDK and normal macOS build tools. The script records its selected features in `Vendor/FFmpeg/build-manifest.json`. Intermediate files are in temporary storage and DerivedData. To change FFmpeg, use your modified source archive and update the checksum in that script, or replace the XCFramework with a compatible library exporting `MediaRemux.h`'s C interface. Regenerate the Xcode project, build, and sign with your own Apple development team. All application source needed to relink is supplied. There is no library checksum enforcement at runtime.
+
+The dynamic framework contains file protocol, MPEG-TS demuxing, MP4 muxing and the H.264/HEVC/AAC parsing needed for packet copying. No networking, encoders, command-line programs, GPL or nonfree components are built. It receives app-owned local staging paths only. Cancellation is atomic; work runs on a serial utility queue, never the UI thread. Numeric errors are reported without library log strings or filenames.
+
+## Save behavior and limits
+
+Apple's background HLS save is tried first. On selected transport failures, a foreground MP4 save can use the actual browser User-Agent and normally scoped cookies. Only exact server-published URLs are requested. The fallback accepts finite clear MPEG-TS playlists with combined H.264/HEVC video and AAC audio, at most 2,048 segments and 8 GB. It rejects encrypted media, keys, live streams, external tracks, fragmented MP4, byte ranges, discontinuities and unresolved variables. It never removes protection, rewrites signed URLs or invents access information.
+
+Segments are fetched sequentially, checked, joined locally and remuxed without re-encoding. Native AVFoundation validates the final file and expected duration before atomic catalogue commit. Temporary media is removed on completion or cancellation; interrupted foreground saves are not resumable. Keep VisionStream open. Temporary TS and MP4 coexist, so saving requires roughly twice the downloaded media space plus a 512 MB reserve. This fallback does not guarantee every clear HLS variant or source works. Hardware battery/thermal performance, 8K limits and long-session resource use still require validation. The later user report and passive catalogue establish three completed foreground fallback saves for the tested private source; they do not identify the original native background HTTP 404 resource or establish universal website support.

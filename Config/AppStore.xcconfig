@@ -1,0 +1,7 @@
+#include "Base.xcconfig"
+// Owner-specific App Store team and registered identity are separate from the
+// personal installation so preparing a store build never resets its saved data.
+#include? "AppStoreLocal.xcconfig"
+ENABLE_TESTABILITY = NO
+DEBUG_INFORMATION_FORMAT = dwarf-with-dsym
+VALIDATE_PRODUCT = YES

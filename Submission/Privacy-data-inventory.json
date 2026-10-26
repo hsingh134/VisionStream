@@ -1,0 +1,24 @@
+{
+  "reviewed": "2026-10-26",
+  "developerOperatedAccounts": false,
+  "automaticAnalyticsOrCrashUpload": false,
+  "advertisingSDKs": false,
+  "trackingByAppDeveloper": false,
+  "localData": [
+    "WebKit website data and login sessions",
+    "Restoration preference and optional saved website/page address",
+    "Intentional bookmark names and addresses",
+    "Saved media and native background transfer journal",
+    "Optional bounded host-level diagnostics, off on fresh installations",
+    "Current technical state in memory and explicit copy/share reports"
+  ],
+  "networkDestinations": "User-selected websites, source/media/library servers and their redirects; these services receive normal IP/request information and have their own practices.",
+  "developerCollectionAssessment": "No automatic developer-operated collection is implemented. On-device processing is not collected data under Apple's definition. User-directed open-web navigation is distinct from developer collection. Do not claim third-party websites do not track.",
+  "supportReportAssessment": "If the publisher receives reports by email or a support service, assess actual retention/use, browsing hosts, identifiers and diagnostics against Apple's optional customer-support disclosure criteria. No automatic exemption is assumed. Reevaluate App Store privacy answers when a support process is configured.",
+  "retention": "Detailed diagnostics: seven sessions, 96 MB total, 32 MB/session; report coverage discloses gaps. Generated local report files replace previous owned exports. User can disable recording and delete retained history/links/reports while keeping media and website sessions.",
+  "thirdPartyHostPrivacy": "Public support/privacy page hosting can log visitors' IPs independently; describe the chosen host before publication.",
+  "appStorePrivacyDraft": "No developer-collected data for the current local-only app; owner must verify actual support/hosting practices, all bundled dependencies and final questionnaire before submission.",
+  "policyResource": "VisionStream/Resources/PrivacyPolicy.txt",
+  "officialReference": "https://developer.apple.com/app-store/app-privacy-details/",
+  "finalQuestionnaireCompleted": false
+}

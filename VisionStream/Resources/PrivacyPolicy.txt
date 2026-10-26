@@ -1,0 +1,32 @@
+VisionStream privacy policy
+Updated 26 October 2026
+
+VisionStream is a general-purpose web browser and immersive video player. It has no developer-operated account, advertising service, analytics upload service or automatic diagnostic uploader.
+
+Websites and network requests
+When automatic video opening is enabled, a recent recognised Play interaction is processed locally to request native playback. Autoplay alone does not trigger this. You can turn it off in Browser settings. These short-lived interaction signals are not an analytics upload.
+
+When you open a website, its servers receive normal browsing requests, including your network address and browser information. Websites control their own content, cookies, accounts, analytics and privacy practices. VisionStream does not promise that third-party websites do not track you. Native playback, source discovery, libraries and saving contact the media or library addresses you choose. Supported playback and saving may use the normal cookies and browser identity needed for that request. VisionStream does not collect your website passwords into a separate developer account or send them to the developer.
+
+What remains on your device
+WebKit stores website sessions and website data. Browser settings choose whether to remember Home, the last website, or a full last-page address. Full addresses can include private page identifiers. Bookmarks intentionally retain the links you save. Bookmarks, settings and website data may be handled by normal operating-system backups. Clear website data signs you out and removes remembered restoration details; it keeps bookmarks and saved videos.
+
+Videos
+Downloads and imports are saved in VisionStream's application container. Original imported files are kept. Saved copies are excluded from normal backups. You can play, export or delete saved copies in Downloads. Exported copies belong to the destination you choose and cannot be deleted from another application by VisionStream. Apple's native background HLS service can retain request information privately to complete downloads; cancel active transfers and clear website data when you want to end that access. Apple manages the operating system and its own privacy practices.
+
+Waiting saves
+The waiting queue holds source links and request context only in memory. It clears when the application quits. It is not a cloud queue and is not sent to the developer. Website links may expire before a waiting save starts.
+
+Optional detailed troubleshooting history
+Fresh installations leave detailed history off. You can enable it in Browser settings. Existing personal development installations preserve their previous troubleshooting setting until you change it. When enabled, history contains website/media hostnames, technical actions, timing, anonymous correlated identifiers, playback state, dimensions and numeric errors. It excludes URL paths and queries, page titles/content, passwords, cookie values, header values and decoded video images. Hostnames and activity may still be sensitive. Records stay on your device; there is no automatic upload. History is limited to seven sessions and approximately 96 MB, with at most 32 MB per session, and is excluded from normal backups. Events outside those bounds or while recording is off may be absent; reports disclose coverage.
+
+Turning recording off stops new history while retaining old records. Delete diagnostic history turns recording off and removes owned history files, generated report files and diagnostic links from saved-video catalogues. Videos, bookmarks and website sessions remain. Current playback's technical state stays in memory while you use the app. Opening Playback details generates a current technical snapshot even with detailed history off. Copy report writes to the system clipboard and Share report lets you choose a destination. These are explicit actions. Reports you already copied, shared or backed up elsewhere cannot be recalled by VisionStream. Generated local report files are replaced when a new report is made and can be removed through Delete diagnostic history.
+
+Your choices
+Use Browser settings to change restoration and detailed history, or delete diagnostics. Use Clear website data to remove website sessions and remembered page restoration. Remove bookmarks in Bookmarks. Delete saved videos in Downloads. Removing the app removes its app-owned local data according to the operating system; it does not recall exported files or data held by websites.
+
+Children and content
+VisionStream does not provide a curated adult-content service. Websites you choose can contain material unsuitable for children. Website access, content controls and the app's App Store age rating should be considered before allowing children to browse.
+
+Changes and contact
+This policy must be updated if the app's behaviour changes. Publisher details and public support/privacy links are shown below when configured. A development build without those details is not ready for public submission. This policy covers VisionStream; third-party websites and Apple services have their own policies.

@@ -1,0 +1,3 @@
+#!/bin/bash
+echo Can\'t run xrsimulator binary
+exit 1
