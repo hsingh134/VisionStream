@@ -60,7 +60,11 @@ def main():
                     raise SystemExit("Invalid dependency archive path")
                 package.extractall(destination)
         print(f"Verified and prepared {asset['name']}")
-    (vendor / "dependencies.lock.json").write_text(json.dumps(ASSETS, indent=2) + "\n")
+    lock_path = vendor / "dependencies.lock.json"
+    existing = json.loads(lock_path.read_text()) if lock_path.exists() else []
+    managed_names = {asset["name"] for asset in ASSETS}
+    unrelated = [asset for asset in existing if asset.get("name") not in managed_names]
+    lock_path.write_text(json.dumps(ASSETS + unrelated, indent=2) + "\n")
 
 
 if __name__ == "__main__":
