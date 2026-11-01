@@ -39,7 +39,7 @@ framework = 'Vendor/Python.xcframework'
 media_framework = 'Vendor/VisionStreamMedia.xcframework'
 frameworks=[framework,media_framework]
 headers = ['VisionStream/Extraction/ExtractorBridge.h']
-tests = sorted(p.relative_to(ROOT).as_posix() for folder in ['CoreTests', 'VisionOSTests'] for p in (ROOT/'Tests'/folder).rglob('*.swift'))
+tests = sorted(p.relative_to(ROOT).as_posix() for folder in ['CoreTests', 'VisionOSTests', 'Quality'] for p in (ROOT/'Tests'/folder).rglob('*.swift'))
 file_refs, build_refs = {}, {}
 types = {'.xcassets':'folder.assetcatalog', '.xcprivacy': 'text.xml', '.swift': 'sourcecode.swift', '.m': 'sourcecode.c.objc', '.h': 'sourcecode.c.h', '.xcframework': 'wrapper.xcframework', '.metal': 'sourcecode.metal', '.js': 'sourcecode.javascript', '.html': 'text.html', '.usda': 'text', '.md': 'text', '.txt': 'text', '.xcconfig': 'text.xcconfig', '.plist': 'text.plist.xml'}
 for path in sources + resources + tests + headers + frameworks + ['Config/Base.xcconfig', 'Config/AppStore.xcconfig', 'Config/Local.xcconfig.example', 'VisionStream/Info.plist']:

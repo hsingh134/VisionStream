@@ -1,5 +1,10 @@
 # Automated testing
 
+## Image-quality verification (0.16.0)
+
+Generate original CC0 patterns with `python3 Scripts/generate_quality_fixtures.py`, then run `sh Scripts/test_video_quality.sh` and `python3 Scripts/benchmark_projection.py`. `VideoQualityNativeTests` checks actual colour/range/PQ/HLG decode, metadata interpretation, full 8K mono and paused-frame mode changes. `image-quality` is a mounted-scene scenario exercising the real Picture actions, independent overlay and same-frame/viewpoint A/B; its driver captures CC0 screenshots. No final display/EDR or physical gaze/pinch claim is inferred. Full commands, metrics and known test-harness corrections are in [VIDEO_QUALITY_BENCHMARKS.md](../VIDEO_QUALITY_BENCHMARKS.md).
+
+
 ## Testing profile and active probes (0.15.0)
 
 Core tests cover full-link validation, credential exclusions, selected headers, persistence, deletion and redaction of previously recorded testing data after opt-out. Native tests use original CC0 HTTPS fixtures to check a real HTTP 412 response, excluded secret response headers/cookie values, paused-probe outcomes, webpage clock advancement and an inline script error before document-end injection. Private build-default opt-in and persisted opt-out are tested independently. An injected diagnostic store owns its capture profile; it cannot inherit full-link opt-in from unrelated saved UI preferences. This prevents a prior full-link scene from contaminating later redaction checks.

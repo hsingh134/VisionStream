@@ -4,7 +4,7 @@ from pathlib import Path
 import argparse,hashlib,json,os,zipfile
 ROOT=Path(__file__).resolve().parents[1]
 FOLDERS={'Config','Docs','Fixtures','Licenses','Scripts','Submission','Tests','Vendor','VisionStream','VisionStream.xcodeproj'}
-FILES={'LICENSE','README.md','THIRD_PARTY_NOTICES.md','Package.swift','.gitignore'}
+FILES={'LICENSE','README.md','THIRD_PARTY_NOTICES.md','Package.swift','.gitignore','VIDEO_QUALITY_AUDIT.md','VIDEO_QUALITY_BENCHMARKS.md'}
 CONFIG={'Base.xcconfig','AppStore.xcconfig','Local.xcconfig.example','Publication.json.example'}
 EXCLUDED={'__pycache__','xcuserdata','Prepared','Generated','.git','ExtractorPackages'}
 

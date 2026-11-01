@@ -17,7 +17,7 @@ import Darwin
             return from(ProcessInfo.processInfo.environment)
         }
         static func from(_ env: [String: String]) -> Self? {
-            let names: Set<String> = ["diagnostics", "controls-hide", "tabs", "auto-play", "soak", "saved-state", "downloads", "forms", "quality", "quality4k", "controls", "controls-format", "controls-quality", "mp4", "hls", "library", "library-hls", "cancel", "unsupported", "finder", "reentry", "interrupted"]
+            let names: Set<String> = ["image-quality", "diagnostics", "controls-hide", "tabs", "auto-play", "soak", "saved-state", "downloads", "forms", "quality", "quality4k", "controls", "controls-format", "controls-quality", "mp4", "hls", "library", "library-hls", "cancel", "unsupported", "finder", "reentry", "interrupted"]
             guard let name = env["VISIONSTREAM_SCENE_TEST"], names.contains(name),
                   let raw = env["VISIONSTREAM_TEST_ORIGIN"], let url = URL(string: raw),
                   url.scheme == "https", ["127.0.0.1", "localhost"].contains(url.host ?? ""),
@@ -50,9 +50,17 @@ import Darwin
         let upright: () -> Void
     }
     static var controlActions: ControlActions?
+    struct ImageActions {
+        let panel: (Bool) -> Void
+        let mode: (VideoImageMode) -> Void
+        let overlay: (Bool) -> Void
+        let compare: () -> Void
+    }
+    static var imageActions: ImageActions?
     static var returnAction: (() async -> Void)?
     static var sceneTap: (() -> Void)?
     static var controlsVisible: (() -> Bool)?
+    static var diagnosticsVisible: (() -> Bool)?
     static var inputSurfaceReady: (() -> Bool)?
     static var rendererBounds: (() -> [Double]?)?
     static var rendererPose: (() -> [Double]?)?
@@ -88,6 +96,7 @@ import Darwin
     private static var configuration: Configuration?
     private static var startedAt = Date()
     private static var soakMetrics: [String: Any] = [:]
+    private static var imageComparisons: [[String: Any]] = []
     private enum Failure: Error { case check(String) }
 
     static func bindBrowser(app: AppModel, watch: @escaping (MediaCandidate) -> Void,
@@ -162,7 +171,7 @@ import Darwin
         if config.name == "forms" { try await forms(config, app: app); return }
         if config.name == "diagnostics" { try await diagnosticChecks(config,app:app);return }
         if config.name == "auto-play" { try await automaticPlayback(config,app:app);return }
-        let path = ["quality4k", "soak"].contains(config.name) ? "quality-4k.html" : (["quality", "quality4k", "soak"].contains(config.name) || config.name.hasPrefix("controls")) ? "quality.html" : ["mp4", "reentry", "interrupted"].contains(config.name) ? "automation-mp4" : (config.name == "hls" ? "automation-hls" : "empty-test")
+        let path = config.name == "image-quality" ? "quality-audit.html" : ["quality4k", "soak"].contains(config.name) ? "quality-4k.html" : (["quality", "quality4k", "soak"].contains(config.name) || config.name.hasPrefix("controls")) ? "quality.html" : ["mp4", "reentry", "interrupted"].contains(config.name) ? "automation-mp4" : (config.name == "hls" ? "automation-hls" : "empty-test")
         // Submit through the actual address form action rather than restoring a
         // user's saved page or asking an external UI tool to type while locked.
         openAddress?()
@@ -281,6 +290,7 @@ import Darwin
                 record("saved-file-offline-and-automatic-format", app: app)
             }
             record("real-immersive-space-native-frames", app: app)
+            if config.name == "image-quality" { try await imageQuality(app: app) }
             if config.name == "interrupted" { return }
             if config.name == "soak" { try await soak(config, app: app) }
             if config.name.hasPrefix("controls") {
@@ -309,6 +319,40 @@ import Darwin
                 record("saved-file-deletion", app: app)
             }
         }
+    }
+
+    private static func imageQuality(app: AppModel) async throws {
+        guard let actions=imageActions else { throw Failure.check("image-actions-not-mounted") }
+        let p=app.playback
+        try require(p.decodedWidth==4096 && p.decodedHeight==2048 && p.presentation == .vr180 && p.layout == .sideBySide,"quality-chart-original-dimensions-and-auto-format")
+        p.pause();try await Task.sleep(for:.milliseconds(300))
+        let output=p.videoOutput,pose=rendererPose?()
+        let pts=p.videoPipeline.frame?.presentationSeconds
+        actions.panel(true);try await wait("picture-panel-mounted") { mounted(.imageQuality) }
+        actions.overlay(true);try await wait("diagnostics-entity-visible") { diagnosticsVisible?() == true }
+        for mode in VideoImageMode.allCases {
+            let before=p.videoPipeline.performance.completedFrames
+            let alreadySelected=p.imageMode == mode
+            actions.mode(mode)
+            try await wait("picture-mode-"+mode.rawValue) { p.videoPipeline.render?.mode == mode && (alreadySelected || p.videoPipeline.performance.completedFrames>before) }
+            try require(p.videoOutput === output && !p.isPlaying,"picture-mode-keeps-decoder-and-pause")
+            try require(abs((p.videoPipeline.frame?.presentationSeconds ?? -1)-(pts ?? -2))<0.001,"picture-mode-keeps-source-frame")
+            try require(rendererPose?() == pose,"picture-mode-keeps-viewpoint")
+            let r=p.videoPipeline.render
+            try require(r?.plan.width==2048 && r?.plan.height==2048 && r?.plan.downscaled==false,"picture-mode-retains-eye-detail")
+            try require(((r?.plan.mipLevels ?? 0)>1) == (mode == .maximum),"maximum-only-allocates-mips")
+            let encoder=JSONEncoder()
+            if let snapshot=try JSONSerialization.jsonObject(with:encoder.encode(p.videoPipeline)) as? [String:Any] { imageComparisons.append(snapshot) }
+            record("image-comparison-"+mode.rawValue,app:app)
+            try await Task.sleep(for:.milliseconds(1700)) // Host can capture original CC0 chart.
+        }
+        actions.compare();try await wait("ab-original") { p.imageMode == .original && p.videoPipeline.render?.mode == .original }
+        actions.compare();try await wait("ab-maximum") { p.imageMode == .maximum && p.videoPipeline.render?.mode == .maximum }
+        try require(p.videoOutput === output && !p.isPlaying,"ab-does-not-reprepare-or-resume")
+        actions.overlay(false);try await wait("diagnostics-hidden") { diagnosticsVisible?() == false }
+        actions.panel(false);try await wait("picture-panel-dismissed") { !mounted(.imageQuality) }
+        record("image-panel-ab-and-overlay-toggle",app:app)
+        p.play()
     }
 
     private static func residentBytes() -> UInt64 {
@@ -454,7 +498,7 @@ import Darwin
                 if presentation == .screen {
                     let eye = layout.eyeSize(width: playback.decodedWidth, height: playback.decodedHeight)
                     mesh = .screen(aspectRatio: Float(eye.width) / Float(max(1, eye.height)))
-                } else { mesh = .generate(projection: playback.projection) }
+                } else { mesh = .generate(projection: playback.projection, radius: ImmersiveRenderer.panoramaRadius) }
                 let xs = mesh.positions.map(\.x), ys = mesh.positions.map(\.y), zs = mesh.positions.map(\.z)
                 let expected = [Double((xs.max() ?? 0) - (xs.min() ?? 0)), Double((ys.max() ?? 0) - (ys.min() ?? 0)), Double((zs.max() ?? 0) - (zs.min() ?? 0))]
                 try await wait("renderer-mode-" + presentation.rawValue + "-" + layout.rawValue) {
@@ -647,7 +691,7 @@ import Darwin
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             let report = try JSONSerialization.jsonObject(with: Data(app.playbackSnapshot.utf8))
             let record: [String: Any] = ["schemaVersion": 1, "identifier": config.identifier, "scenario": config.name,
-                                        "status": status, "checks": checks, "soakMetrics": soakMetrics, "failureCode": failure.map { $0 as Any } ?? NSNull(),
+                                        "status": status, "checks": checks, "soakMetrics": soakMetrics, "imageComparisons": imageComparisons, "failureCode": failure.map { $0 as Any } ?? NSNull(),
                                         "elapsedSeconds": Date().timeIntervalSince(startedAt), "report": report,
                                         "testKind": "In-process real-scene integration; no synthetic input", "audioMuted": true]
             try JSONSerialization.data(withJSONObject: record, options: [.sortedKeys]).write(to: directory.appendingPathComponent("Scenario.json"), options: .atomic)

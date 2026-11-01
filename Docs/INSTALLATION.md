@@ -1,5 +1,10 @@
 # Installation and signing
 
+## Picture quality (0.16.0)
+
+Version 0.16.0 (39) adds **Picture → Original / Enhanced / Maximum Quality**, **A/B** and an optional **Pipeline diagnostics** overlay. Original is the default. Pause before A/B to compare the same source frame and viewpoint. Maximum adds filtering cost; use Original if hardware cannot sustain smooth motion. Picture modes do not select a higher streaming rendition. See [the audit and physical checklist](../VIDEO_QUALITY_AUDIT.md) and [measurements](../VIDEO_QUALITY_BENCHMARKS.md). Source precision, HDR display appearance, final compositor resolution and headset thermals are distinct; only the accessible pipeline stages are measured.
+
+
 ## Testing diagnostics (0.15.0)
 
 Open **Video tools → Playback details**, enable **Testing diagnostics · include full links**, and choose **Run playback checks**. After reproducing the failure, use **Share report**. This records future observations; earlier redacted history cannot recover its old links. The existing Playback details location is unchanged.

@@ -142,6 +142,27 @@ public enum VideoFormatDetection {
         }}
         return result
     }
+
+    /// Sparse, read-only analysis of the new float output. No full-frame CPU copy.
+    /// This is only packing inference; the renderer retains extended RGB values.
+    public static func sampleLinearHalfLuma(rgba: UnsafeBufferPointer<UInt16>, width: Int, height: Int, componentsPerRow: Int) -> [Float] {
+        guard (1...16384).contains(width), (1...16384).contains(height),
+              componentsPerRow >= width * 4, componentsPerRow <= width * 4 + 32768,
+              rgba.count >= componentsPerRow * height else { return [] }
+        var result: [Float] = []; result.reserveCapacity(128 * 64)
+        for y in 0..<64 { for x in 0..<128 {
+            var sum: Float = 0
+            for sy in 0..<4 { for sx in 0..<4 {
+                let row = min(height - 1, ((y * 8 + sy * 2 + 1) * height) / (64 * 8))
+                let column = min(width - 1, ((x * 8 + sx * 2 + 1) * width) / (128 * 8))
+                let i = row * componentsPerRow + column * 4
+                let value = Float(Float16(bitPattern: rgba[i])) * 0.2126 + Float(Float16(bitPattern: rgba[i + 1])) * 0.7152 + Float(Float16(bitPattern: rgba[i + 2])) * 0.0722
+                if value.isFinite { sum += max(0, min(1, value)) }
+            } }
+            result.append(sum / 16)
+        } }
+        return result
+    }
     public static func projection(width: Int, height: Int, layout: StereoLayout) -> VideoProjection? {
         let eye = layout.eyeSize(width: width, height: height)
         guard eye.height > 0, layout != .mono else { return nil }

@@ -1,5 +1,10 @@
 # Technical architecture
 
+## Video-quality pipeline (0.16.0)
+
+The rendering path now requests wide-colour linear P3 RGBA16F, validates actual frame metadata and converts to linear sRGB during GPU eye preparation. Original, optional bounded Enhanced and Maximum (mipmaps/anisotropic sampler request) operate independently from source rendition/projection/layout. Mono shares one eye resource and can retain 8192-wide source dimensions within an explicit reported descriptor budget. Mesh density and skybox distance are explicit. See [the complete audit](../VIDEO_QUALITY_AUDIT.md) for the original/corrected pipeline, colour fallback, measurement scope and physical limits.
+
+
 ## Full-link testing profile (0.15.0)
 
 The ordinary redacted session journal remains the default. Optional typed `TestingDiagnosticDetails` payloads attach sanitized full URL links, selected header values/all header names, cookie metadata, public URLSession transaction metrics and typed browser snapshots. Per-session resource UUIDs correlate resource-link events with existing page, candidate, playlist, variant, segment and native-error references. Known credential query fields, URL userinfo, cookie values and credential headers are excluded; ordinary signed query strings are intentionally preserved. Every persisted/exported payload is revalidated. Switching off removes testing payloads from exports of restored history as well as new events. Deletion clears the journal, link registry and generated reports. This is bounded retained session history, not an unlimited packet capture. The screen preview is capped at 12,000 characters to avoid main-thread text layout stalls; Copy/Share read the complete validated report file.

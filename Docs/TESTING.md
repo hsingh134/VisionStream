@@ -1,5 +1,12 @@
 # Verification record
 
+## Video-quality audit 0.16.0 (1 November 2026)
+
+Release simulator and signed device builds succeed. Native visionOS 26 and 27: **219 pass / 12 optional skips / 0 failures each**. Mounted scenes: **19 scenarios / 184 checks each**, including new Picture/A-B/diagnostics, existing navigation/downloads/controls and a 120-second soak. Production GPU readback: **9,248 assertions** on Mac and each simulator; host core **106 pass**; standalone **100 methods / 1,949 assertions**. Tagged BT.709 full/limited range, PQ/HLG extended values and actual 8192 × 4096 shared mono eye texture are verified. Both runtimes' Picture screenshots were visually reviewed. The existing desktop trusted-input harness was repaired using public AppKit view handlers; no production input guard changed. Details and retained failed investigations: [benchmarks](../VIDEO_QUALITY_BENCHMARKS.md), [audit and hardware checklist](../VIDEO_QUALITY_AUDIT.md).
+
+Version 0.16.0 (39) is confirmed installed on the owner's physical Vision Pro after a connection-related retry; it was not launched into the retained webpage. This is installation verification, **not physical visual/stereo/HDR acceptance**. Public builds still default full-link testing diagnostics off. The 0.15.0 records below are historical.
+
+
 ## Expanded testing diagnostics 0.15.0 (1 November 2026)
 
 Signed **0.15.0 (38)** passes signature verification and is confirmed installed on the physical Vision Pro without launching its retained webpage. This owner's authorized device build defaults full-link testing on; public/simulator/App Store builds default it off. A persisted in-app opt-out wins. This adds diagnostic evidence and explicit probes; no new live-site streaming repair is claimed.

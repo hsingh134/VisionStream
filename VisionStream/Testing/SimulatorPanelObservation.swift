@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum SimulatorPanel: String {
-    case videoBar, browser, address, stream, finder, library, details, playback, immersive, format, quality, position, downloads, bookmarks, settings
+    case videoBar, browser, address, stream, finder, library, details, playback, imageQuality, immersive, format, quality, position, downloads, bookmarks, settings
 }
 
 extension View {

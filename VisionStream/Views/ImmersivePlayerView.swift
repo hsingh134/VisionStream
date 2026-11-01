@@ -14,7 +14,9 @@ import SwiftUI
             transport.position = [0, 1.2, -1.6]
             content.add(transport)
             do {
-                let renderer = try ImmersiveRenderer(playback: app.playback, controls: transport)
+                let diagnostic = attachments.entity(for:"video-diagnostics")
+                if let diagnostic { diagnostic.isEnabled = app.playback.showVideoDiagnostics; content.add(diagnostic) }
+                let renderer = try ImmersiveRenderer(playback: app.playback, controls: transport, diagnosticOverlay: diagnostic)
                 self.renderer = renderer
                 content.add(renderer.video)
                 content.add(renderer.inputSurface)
@@ -23,6 +25,7 @@ import SwiftUI
                 if SimulatorScenarioRunner.isConfigured {
                     SimulatorScenarioRunner.sceneTap = { app.playback.controls.toggle() }
                     SimulatorScenarioRunner.controlsVisible = { [weak renderer] in renderer?.controls.isEnabled == true }
+                    SimulatorScenarioRunner.diagnosticsVisible = { [weak diagnostic] in diagnostic?.isEnabled == true }
                     SimulatorScenarioRunner.inputSurfaceReady = { [weak renderer] in
                         guard let renderer, let scene = renderer.inputSurface.scene else { return false }
                         let viewer = renderer.inputSurface.position
@@ -48,6 +51,7 @@ import SwiftUI
                 app.playback.fail("The immersive renderer could not start. Check the bundled shader and device support, then return to the browser.")
             }
         } attachments: {
+            Attachment(id:"video-diagnostics") { VideoPipelineOverlay(playback:app.playback) }
             Attachment(id: "transport") {
                 PlaybackControls(app: app, immersive: true)
                     .accessibilityHidden(!app.playback.controls.isVisible)
@@ -64,6 +68,7 @@ import SwiftUI
             #if targetEnvironment(simulator)
             SimulatorScenarioRunner.rendererBounds = nil
             SimulatorScenarioRunner.rendererPose = nil
+            SimulatorScenarioRunner.diagnosticsVisible = nil
             SimulatorScenarioRunner.sceneTap = nil; SimulatorScenarioRunner.controlsVisible = nil; SimulatorScenarioRunner.inputSurfaceReady = nil
             #endif
             app.history.record(.lifecycle,context:app.playback.diagnosticContext,labels:["phase":"immersive-closed"])

@@ -36,7 +36,7 @@ def main():
     parser.add_argument('--simulator', help='Optional existing dedicated Automation Lab simulator')
     parser.add_argument('--fixture-session', type=Path, help='Optional existing fixture metadata for that simulator')
     parser.add_argument('--build-root', type=Path, default=ROOT/'DerivedData/OnDeviceClean')
-    parser.add_argument('--cases', nargs='+', choices=DEFAULT_CASES+['diagnostics', 'auto-play', 'soak', 'saved-state', 'downloads', 'finder', 'interrupted', 'quality', 'quality4k', 'controls', 'controls-format', 'controls-quality', 'controls-hide'])
+    parser.add_argument('--cases', nargs='+', choices=DEFAULT_CASES+['image-quality', 'diagnostics', 'auto-play', 'soak', 'saved-state', 'downloads', 'finder', 'interrupted', 'quality', 'quality4k', 'controls', 'controls-format', 'controls-quality', 'controls-hide'])
     parser.add_argument('--public-extraction', action='store_true', help='Opt into the fixed public-domain NASA finder scenario')
     parser.add_argument('--soak-seconds', type=int, default=600, help='Duration of the opt-in soak case, from 60 to 1800 seconds')
     parser.add_argument('--case-timeout', type=int, default=180)
@@ -87,6 +87,7 @@ def main():
                 env=environment, stdout=session_log, stderr=subprocess.STDOUT)
             deadline = time.monotonic()+20
             fixture = None
+            captured_image_modes=set()
             while time.monotonic() < deadline:
                 fixture = read_json(fixture_path)
                 if fixture and fixture.get('active'): break
@@ -111,8 +112,15 @@ def main():
             if launch.returncode: raise RuntimeError('Simulator app launch failed.')
             deadline = time.monotonic()+args.case_timeout+(args.soak_seconds if name == 'soak' else 0)
             result = None
+            captured_image_modes=set()
             while time.monotonic() < deadline:
                 current = read_json(folder/'Scenario.json')
+                if name == 'image-quality' and current and current.get('identifier') == identifier:
+                    for check in current.get('checks', []):
+                        marker=check.get('name', '')
+                        if marker.startswith('image-comparison-') and marker not in captured_image_modes:
+                            simctl('io', udid, 'screenshot', str(output/(marker+'.png')), check=False)
+                            captured_image_modes.add(marker)
                 if completed_result(current, identifier, name):
                     result = current; break
                 time.sleep(0.2)

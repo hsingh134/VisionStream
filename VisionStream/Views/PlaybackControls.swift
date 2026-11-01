@@ -10,6 +10,8 @@ import SwiftUI
     @State private var showFormat = false
     @State private var showQuality = false
     @State private var showPosition = false
+    @State private var showImage = false
+    @State private var comparisonImageMode: VideoImageMode = .enhanced
     @State private var returningToPage = false
     @State private var returnError: String?
     var body: some View {
@@ -28,7 +30,7 @@ import SwiftUI
                         .labelStyle(.iconOnly).help("Tap the video once to show controls again")
                 }
                 if playback.isBuffering || playback.isSeeking || playback.isPreparing { ProgressView().controlSize(.small).accessibilityLabel("Loading video") }
-                Button { showFormat = false; showPosition = false; showQuality.toggle() } label: { Label(playback.isOffline ? "Offline" : playback.quality.label, systemImage: "sparkles.tv") }
+                Button { showFormat = false; showPosition = false; showImage = false; showQuality.toggle() } label: { Label(playback.isOffline ? "Offline" : playback.quality.label, systemImage: "sparkles.tv") }
                     .disabled(playback.isPreparing || playback.isOffline).accessibilityLabel(playback.isOffline ? "Offline video quality" : "Streaming quality")
             }
             if let returnError { Text(returnError).font(.callout).foregroundStyle(.orange) }
@@ -75,14 +77,15 @@ import SwiftUI
             Divider().opacity(0.4)
             if immersive { Text("Tap the video to hide or show controls").font(.caption).foregroundStyle(.secondary) }
             HStack {
-                Button { showQuality = false; showPosition = false; showFormat.toggle() } label: {
+                Button { showQuality = false; showPosition = false; showImage = false; showFormat.toggle() } label: {
                     Label("\(playback.automaticallyDetectFormat ? "Auto · " : "")\(playback.presentation.label) · \(playback.layout.label)", systemImage: "slider.horizontal.3")
                         .font(.callout)
                 }
                     .accessibilityLabel("Video format settings")
+                Button { showQuality = false; showFormat = false; showPosition = false; showImage.toggle() } label: { Label("Picture", systemImage:"camera.filters") }.accessibilityLabel("Image quality and diagnostics")
                 Spacer()
                 if immersive {
-                    Button { showQuality = false; showFormat = false; showPosition.toggle() } label: { Label("Position", systemImage: "move.3d") }
+                    Button { showQuality = false; showFormat = false; showImage = false; showPosition.toggle() } label: { Label("Position", systemImage: "move.3d") }
                         .accessibilityLabel("Viewing position")
                     Button("Recenter", systemImage: "scope") { startRecenter() }
                         .keyboardShortcut("r", modifiers: [.command, .shift])
@@ -93,7 +96,11 @@ import SwiftUI
             }
             // View attachments cannot reliably present window popovers. Expand
             // the selected settings inside the same movable control surface.
-            if showPosition {
+            if showImage {
+                Divider()
+                imageSettings.simulatorPanel(.imageQuality)
+                Button("Done") { showImage = false }.frame(maxWidth:.infinity,alignment:.trailing)
+            } else if showPosition {
                 Divider()
                 positionSettings.simulatorPanel(.position)
                 Button("Done") { showPosition = false }.frame(maxWidth: .infinity, alignment: .trailing)
@@ -109,7 +116,7 @@ import SwiftUI
         }.padding(28).controlSize(.regular)
             .simultaneousGesture(TapGesture().onEnded { app.playback.controls.interacted() })
             .onChange(of: scrubTime) { _, _ in app.playback.controls.interacted() }
-            .onChange(of: showFormat || showQuality || showPosition || scrubbing || returningToPage) { _, held in
+            .onChange(of: showFormat || showQuality || showPosition || showImage || scrubbing || returningToPage) { _, held in
                 app.playback.controls.interactionLocked = held
                 app.playback.controls.interacted()
             }
@@ -117,6 +124,7 @@ import SwiftUI
             .onAppear {
                 #if targetEnvironment(simulator)
                 if immersive && SimulatorScenarioRunner.isConfigured {
+                    SimulatorScenarioRunner.imageActions = .init(panel: { showImage = $0 }, mode: selectImageMode, overlay: { playback.showVideoDiagnostics = $0 }, compare: compareImage)
                     SimulatorScenarioRunner.returnAction = returnToPage
                     SimulatorScenarioRunner.controlActions = .init(
                         format: { showFormat = $0 }, quality: { showQuality = $0 },
@@ -129,10 +137,38 @@ import SwiftUI
             }
             .onDisappear {
                 #if targetEnvironment(simulator)
-                if immersive { SimulatorScenarioRunner.returnAction = nil; SimulatorScenarioRunner.controlActions = nil }
+                if immersive { SimulatorScenarioRunner.returnAction = nil; SimulatorScenarioRunner.controlActions = nil; SimulatorScenarioRunner.imageActions = nil }
                 #endif
             }
     }
+    private func selectImageMode(_ mode: VideoImageMode) {
+        if mode != .original { comparisonImageMode = mode }
+        app.playback.imageMode = mode
+    }
+    private func compareImage() {
+        if app.playback.imageMode == .original { app.playback.imageMode = comparisonImageMode }
+        else { comparisonImageMode = app.playback.imageMode; app.playback.imageMode = .original }
+    }
+    private var imageSettings: some View {
+        @Bindable var playback = app.playback
+        return VStack(alignment:.leading,spacing:12) {
+            Text("Picture quality").font(.title3.bold())
+            Picker("Rendering",selection:Binding(get:{ playback.imageMode },set:selectImageMode)) {
+                ForEach(VideoImageMode.allCases) { Text($0.label).tag($0) }
+            }.pickerStyle(.segmented)
+            Text(playback.imageMode.explanation).font(.caption).foregroundStyle(.secondary)
+            HStack {
+                Button("A/B · Original ↔ \(comparisonImageMode.label)",systemImage:"rectangle.2.swap") { compareImage() }
+                Toggle("Pipeline diagnostics",isOn:$playback.showVideoDiagnostics).toggleStyle(.button)
+            }
+            Text("Pause to compare the same decoded frame and viewpoint. Picture modes do not change the stream quality or add missing detail.").font(.caption).foregroundStyle(.secondary)
+            if let render=playback.videoPipeline.render {
+                Text("Per eye: \(render.plan.sourceEyeWidth) × \(render.plan.sourceEyeHeight) source → \(render.plan.width) × \(render.plan.height) texture").font(.caption).monospacedDigit()
+                if render.plan.downscaled { Text("Application texture memory budget reduced eye resolution. See Playback details for the allocation and scale.").font(.caption).foregroundStyle(.orange) }
+            }
+        }
+    }
+
     private func startRecenter() {
         showPosition = false
         app.playback.scheduleRecenter()

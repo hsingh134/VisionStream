@@ -1,6 +1,6 @@
 import Foundation
 
-public enum VideoPresentation: String, CaseIterable, Identifiable, Sendable {
+public enum VideoPresentation: String, CaseIterable, Codable, Identifiable, Sendable {
     case screen, vr180, vr360
     public var id: Self { self }
     public var label: String {

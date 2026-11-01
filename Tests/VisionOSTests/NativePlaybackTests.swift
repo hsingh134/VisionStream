@@ -888,7 +888,7 @@ final class NativePlaybackTests: XCTestCase {
             playback.projection = projection == .vr180 ? .vr360 : .vr180
             playback.layout = layout == .mono ? .topBottom : .mono
             playback.swapEyes = true; playback.flipY = true
-            let expectedExtent: Float = projection == .vr180 ? 20 : 10
+            let expectedExtent: Float = (projection == .vr180 ? 2 : 1) * ImmersiveRenderer.panoramaRadius
             try await waitUntil({ renderer.video.isEnabled &&
                 abs((renderer.video.model?.mesh.bounds.extents.z ?? 0) - expectedExtent) < 0.1 }, seconds: 5)
             let extent = try XCTUnwrap(renderer.video.model).mesh.bounds.extents.z

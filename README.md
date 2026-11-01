@@ -1,5 +1,7 @@
 # VisionStream
 
+Version 0.16.0 adds Original, Enhanced and Maximum Quality picture modes, paused-frame A/B, a developer pipeline overlay, higher-precision linear colour processing and full-width 8K mono textures within an explicit budget. See the [quality audit](VIDEO_QUALITY_AUDIT.md) and [benchmarks](VIDEO_QUALITY_BENCHMARKS.md). Simulator/native pixel tests pass; physical stereo/HDR/sustained-quality acceptance is still required.
+
 A native web browser and immersive video player for Apple Vision Pro. Browse a website, start a compatible video and open it in a native Screen, VR180 or VR360 viewer.
 
 **Current version: 0.15.0 · Early source release · visionOS 26+**

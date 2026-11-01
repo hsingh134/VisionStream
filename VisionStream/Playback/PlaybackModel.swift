@@ -51,6 +51,15 @@ final class PlaybackModel {
     }
     private(set) var decodedWidth = 0
     private(set) var decodedHeight = 0
+    var imageMode: VideoImageMode = .original {
+        didSet { if imageMode != oldValue { diagnostics?.record(.quality,context:diagnosticContext,labels:["phase":"image-mode-changed","mode":imageMode.rawValue]) } }
+    }
+    var showVideoDiagnostics = false
+    func observedDecodedFrame(_ frame: VideoPipelineSnapshot.Frame) { videoPipeline.frame = frame }
+    private(set) var videoPipeline = VideoPipelineSnapshot()
+    private var lastPipelineLog = -Double.infinity
+    private var lastPipelineConfiguration = ""
+    @ObservationIgnored private var sourceInspection: Task<Void, Never>?
     var swapEyes = false { didSet { if swapEyes != oldValue { trace(.controls, action: "swap-eyes") } } }
     var flipY = false { didSet { if flipY != oldValue { trace(.controls, action: "flip-vertical") } } }
     private(set) var recenterID = 0
@@ -152,6 +161,12 @@ final class PlaybackModel {
         preparationRetryCount = 0
         manifestInspection = nil
         decodedWidth = 0; decodedHeight = 0
+        videoPipeline = VideoPipelineSnapshot()
+        #if targetEnvironment(simulator)
+        videoPipeline.environment = "visionOS Simulator; display/decoder/thermal behaviour differs from hardware"
+        #else
+        videoPipeline.environment = "Physical device; final compositor targets are not exposed"
+        #endif
         guard let url = URL(string: candidate.source), ownedLocalFile ? url.isFileURL : candidate.compatibility == .candidate else {
             diagnosticStage = "unsupported-candidate"
             failureReason = .unsupportedCandidate
@@ -285,11 +300,8 @@ final class PlaybackModel {
             item.preferredForwardBufferDuration = 5
             item.preferredPeakBitRate = 0
             item.preferredMaximumResolution = .zero
-            let output = AVPlayerItemVideoOutput(pixelBufferAttributes: [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-                kCVPixelBufferMetalCompatibilityKey as String: true,
-                kCVPixelBufferIOSurfacePropertiesKey as String: [String: Int]()
-            ])
+            let output = AVPlayerItemVideoOutput(outputSettings: VideoPipelineInspection.outputSettings)
+            output.suppressesPlayerRendering = true
             item.add(output)
             videoOutput = output
             player.replaceCurrentItem(with: item)
@@ -335,6 +347,11 @@ final class PlaybackModel {
             isPreparing = false
             isReady = true
             diagnosticStage = "player-ready"
+            sourceInspection = Task { @MainActor [weak self] in
+                let source = await VideoPipelineInspection.source(asset)
+                guard !Task.isCancelled, let self, self.generation == token else { return }
+                self.videoPipeline.source = source
+            }
             startTicker()
             if automaticallyDetectFormat, !selectedURL.isFileURL, !nativeProjectionIdentified, candidate.normalizedMIMEType == "video/mp4" || ["mp4", "m4v"].contains(selectedURL.pathExtension.lowercased()) {
                 inspectSphericalMetadata(url: selectedURL, cookies: selectedCookies, userAgent: userAgent, token: token)
@@ -443,12 +460,19 @@ final class PlaybackModel {
               Date().timeIntervalSince(lastAnalysis) > 0.35, formatVotes.count < 12 else { return }
         lastAnalysis = Date()
         let width = CVPixelBufferGetWidth(buffer), height = CVPixelBufferGetHeight(buffer)
-        guard CVPixelBufferGetPixelFormatType(buffer) == kCVPixelFormatType_32BGRA, width >= 64, height >= 32 else { return }
+        guard width >= 64, height >= 32 else { return }
         CVPixelBufferLockBaseAddress(buffer, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
         guard let base = CVPixelBufferGetBaseAddress(buffer) else { return }
-        let bytes = base.assumingMemoryBound(to: UInt8.self), stride = CVPixelBufferGetBytesPerRow(buffer)
-        let luma = VideoFormatDetection.sampleLuma(bgra: .init(start: bytes, count: stride * height), width: width, height: height, bytesPerRow: stride)
+        let stride = CVPixelBufferGetBytesPerRow(buffer)
+        let luma: [Float]
+        switch CVPixelBufferGetPixelFormatType(buffer) {
+        case kCVPixelFormatType_64RGBAHalf:
+            luma = VideoFormatDetection.sampleLinearHalfLuma(rgba: .init(start: base.assumingMemoryBound(to: UInt16.self), count: stride * height / 2), width: width, height: height, componentsPerRow: stride / 2)
+        case kCVPixelFormatType_32BGRA:
+            luma = VideoFormatDetection.sampleLuma(bgra: .init(start: base.assumingMemoryBound(to: UInt8.self), count: stride * height), width: width, height: height, bytesPerRow: stride)
+        default: return
+        }
         let analysis=VideoFormatDetection.analysePacking(luma:luma,width:128,height:64)
         let match=analysis.layout
         diagnostics?.record(.format, context: diagnosticContext, labels: ["decision":match == nil ? "inconclusive" : "image-match-candidate","packing":match?.rawValue ?? "unknown"], numbers: ["formatVotes":Double(formatVotes.count),"sbsScore":(analysis.sideBySideScore*10).rounded()/10,"tbScore":(analysis.topBottomScore*10).rounded()/10,"sbsRegions":Double(analysis.sideBySideRegions),"tbRegions":Double(analysis.topBottomRegions),"expandedSearch":analysis.expandedSearch ? 1:0], deduplicate:"format-analysis-" + (diagnosticContext?.attemptID.uuidString ?? "none"))
@@ -536,6 +560,26 @@ final class PlaybackModel {
         if width > 0, height > 0 { decodedWidth = width; decodedHeight = height }
         if pauseAfterFrame { pauseAfterFrame = false; pause() }
     }
+
+    func updateVideoPipeline(frame: VideoPipelineSnapshot.Frame, render: VideoPipelineSnapshot.Render,
+                             performance: VideoPipelineSnapshot.Performance) {
+        videoPipeline.frame = frame; videoPipeline.render = render; videoPipeline.performance = performance
+        let configuration="\(render.mode.rawValue)-\(render.layout.rawValue)-\(render.projection.rawValue)-\(render.plan.width)x\(render.plan.height)"
+        let now=ProcessInfo.processInfo.systemUptime
+        if now-lastPipelineLog >= 5 || configuration != lastPipelineConfiguration {
+            lastPipelineLog=now;lastPipelineConfiguration=configuration
+            var numbers:[String:Double] = ["decodedWidth":Double(frame.width),"decodedHeight":Double(frame.height),"eyeWidth":Double(render.plan.sourceEyeWidth),"eyeHeight":Double(render.plan.sourceEyeHeight),"textureWidth":Double(render.plan.width),"textureHeight":Double(render.plan.height),"textureCount":Double(render.plan.textureCount),"textureBytes":Double(render.plan.descriptorBytes),"mipLevels":Double(render.plan.mipLevels),"renderScale":render.plan.scale,"rendererCompletedFrames":Double(performance.completedFrames),"rendererSkippedPolls":Double(performance.backpressureSkips)]
+            numbers["sourceFrameRate"]=videoPipeline.source.nominalFrameRate
+            numbers["sourceBitDepth"]=videoPipeline.source.bitsPerComponent.map(Double.init)
+            numbers["sourceEstimatedBitrate"]=videoPipeline.source.estimatedBitrate
+            numbers["gpuPreparationMs"]=performance.meanGPUPreparationMs
+            numbers["cpuPreparationWallMs"]=performance.lastCPUPreparationWallMs
+            numbers["processCPUpct"]=performance.processCPUPercentOfOneCore
+            numbers["processFootprint"]=performance.processFootprintBytes.map(Double.init)
+            numbers["metalBytes"]=performance.metalDeviceAllocatedBytes.map(Double.init)
+            diagnostics?.record(.playerMetrics,context:diagnosticContext,labels:["phase":"video-pipeline-sample","mode":render.mode.rawValue,"projection":render.projection.rawValue,"packing":render.layout.rawValue,"codec":videoPipeline.source.codec ?? "unknown","colorPrimaries":frame.colorPrimaries ?? "unknown","transferFunction":frame.transferFunction ?? "unknown","sourceTransferFunction":videoPipeline.source.transferFunction ?? "unknown","sampling":render.mode == .maximum ? "linear-mips-anisotropy8":"linear"],numbers:numbers)
+        }
+    }
     func recenter(upright: Bool = false) {
         cancelScheduledRecenter()
         trace(.controls, action: upright ? "reset-upright" : "recenter")
@@ -590,6 +634,7 @@ final class PlaybackModel {
     }
 
     func stop(cancelQualityChange: Bool = true) {
+        sourceInspection?.cancel(); sourceInspection = nil
         metricEvents?.cancel(); metricEvents=nil
         if isReady || isPreparing { trace(.playback, action: "stopped") }
         isAudioInterrupted = false; systemNotice = nil; resumeAfterInterruption = false; audioResumeID = UUID()

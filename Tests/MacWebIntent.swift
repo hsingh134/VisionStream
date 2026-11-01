@@ -34,7 +34,11 @@ import Foundation
         config.userContentController.addUserScript(WKUserScript(source:try String(contentsOf:root.appendingPathComponent("VisionStream/Resources/VideoDetector.js"),encoding:.utf8),injectionTime:.atDocumentEnd,forMainFrameOnly:false,in:.defaultClient))
         let web=WKWebView(frame:NSRect(x:0,y:0,width:680,height:400),configuration:config)
         let window=NSWindow(contentRect:web.frame,styleMask:[.titled,.closable],backing:.buffered,defer:false)
-        window.title="VisionStream — automated CC0 input test";window.contentView=web;window.center();window.makeKeyAndOrderFront(nil)
+        window.title="VisionStream — automated CC0 input test";window.contentView=web;window.center()
+        // Keep only this owned fixture window visible across Spaces. The
+        // production detector correctly refuses intent from a hidden document.
+        window.collectionBehavior=[.canJoinAllSpaces,.fullScreenAuxiliary];window.level = .floating
+        window.makeKeyAndOrderFront(nil);window.orderFrontRegardless()
         defer { web.stopLoading();window.orderOut(nil);config.userContentController.removeScriptMessageHandler(forName:"visionStream",contentWorld:.defaultClient) }
         web.loadFileURL(file,allowingReadAccessTo:folder)
         try await wait("local video metadata") { latest.contains { ($0["width"] as? Int ?? 0)>0 } }
@@ -53,7 +57,12 @@ import Foundation
         try await Task.sleep(for:.milliseconds(300))
         for type in [NSEvent.EventType.leftMouseDown,.leftMouseUp] {
             guard let event=NSEvent.mouseEvent(with:type,location:location,modifierFlags:[],timestamp:ProcessInfo.processInfo.systemUptime,windowNumber:window.windowNumber,context:nil,eventNumber:1,clickCount:1,pressure:type == .leftMouseDown ? 1:0) else { throw NSError(domain:"MacIntentCheck",code:5) }
-            window.sendEvent(event)
+            // An inactive NSWindow may discard its first activation click.
+            // Dispatch through the hit-tested view's public NSResponder API,
+            // confined to our CC0 fixture. WebKit must still report isTrusted;
+            // no JavaScript input attestation or private event API is used.
+            guard let target=window.contentView?.hitTest(location) else { throw NSError(domain:"MacIntentCheck",code:7) }
+            if type == .leftMouseDown { target.mouseDown(with:event) } else { target.mouseUp(with:event) }
         }
         do { try await wait("trusted AppKit click creates isolated play intent") { hasIntent && playing } }
         catch {

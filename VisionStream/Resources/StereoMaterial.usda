@@ -1,7 +1,7 @@
 #usda 1.0
 # Modified from Khaos Tian's Apache-2.0 SBSMaterial (2024).
 # See THIRD_PARTY_NOTICES.md and Licenses/Apache-2.0.txt.
-# Changes: independent eye textures and emissive shading; splitting occurs in Metal.
+# Changes: independent linear eye textures and an unlit surface without post-process tone mapping; splitting occurs in Metal.
 (
     defaultPrim = "Root"
     metersPerUnit = 1
@@ -22,11 +22,10 @@ def Xform "Root" {
             color3f outputs:out
         }
         def Shader "Surface" {
-            uniform token info:id = "ND_UsdPreviewSurface_surfaceshader"
-            color3f inputs:diffuseColor = (0, 0, 0)
-            color3f inputs:emissiveColor.connect = </Root/StereoMaterial/CameraSwitch.outputs:out>
+            uniform token info:id = "ND_realitykit_unlit_surfaceshader"
+            color3f inputs:color.connect = </Root/StereoMaterial/CameraSwitch.outputs:out>
             float inputs:opacity = 1
-            float inputs:roughness = 1
+            bool inputs:applyPostProcessToneMap = false
             token outputs:out
         }
         def Shader "Left" {

@@ -149,7 +149,13 @@ import Foundation
         let session = SessionDiagnosticsTests()
         let privacy = PrivacyControlTests()
         let snapshots = BrowserCookieSnapshotTests()
+        let imageQuality = VideoImageQualityTests()
         let asyncTests: [(String, () async throws -> Void)] = [
+            ("testEightKMonoKeepsDetailWithoutDuplicatingEyeResources", { try imageQuality.testEightKMonoKeepsDetailWithoutDuplicatingEyeResources() }),
+            ("testTextureBudgetReductionsAreExplicitAndMipMemoryIsCounted", { try imageQuality.testTextureBudgetReductionsAreExplicitAndMipMemoryIsCounted() }),
+            ("testHalfFloatPackingAnalysisIsSparseBoundedAndFinite", { imageQuality.testHalfFloatPackingAnalysisIsSparseBoundedAndFinite() }),
+            ("testHigherMeshDensityReducesActualUVInterpolationError", { imageQuality.testHigherMeshDensityReducesActualUVInterpolationError() }),
+            ("testHEVCBitDepthIsDeclaredMetadataNotFloatStoragePrecision", { imageQuality.testHEVCBitDepthIsDeclaredMetadataNotFloatStoragePrecision() }),
             ("testing full links and credential boundaries",session.testTestingModeIncludesSignedLinksAndSelectedHeadersButNeverCredentialValues),
             ("testing URL validation",{ session.testTestingLinkValidationPreservesQueryEncodingAndRejectsLocalFiles() }),
             ("browser cookie scope and expiry",snapshots.testFreshCookiesAreNormallyScopedAndExpiredCookiesAreExcluded),

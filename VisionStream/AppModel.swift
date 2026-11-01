@@ -159,6 +159,7 @@ final class AppModel {
         object["queuedSaveCount"]=queuedSaves.count
         object["openTabCount"]=tabs.pages.count
         object["preparationRetryCount"]=playback.preparationRetryCount
+        object["videoPipeline"] = (try? JSONSerialization.jsonObject(with:encoder.encode(playback.videoPipeline))) ?? NSNull()
         object["manifestInspection"] = playback.manifestInspection.flatMap { try? JSONSerialization.jsonObject(with:encoder.encode($0)) } ?? NSNull()
         if testingDiagnosticsEnabled {
             func link(_ value:String?) -> Any { value.flatMap(TestingDiagnosticDetails.link).map { $0 as Any } ?? NSNull() }
