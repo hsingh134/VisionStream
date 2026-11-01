@@ -101,3 +101,52 @@ final class ExtractorModel {
         streams = []; isLoading = false; errorMessage = nil
     }
 }
+
+/// One metadata-only lookup per loaded page. A short first wait never holds
+/// playback hostage to a slow extractor; immersion can consume the same late
+/// result. No website credentials are exported to the embedded runtime.
+@MainActor final class AutomaticStreamResolver {
+    private let resolve: @Sendable (String) async throws -> ExtractedMedia
+    private var page: URL?
+    private var job: Task<ExtractedMedia?, Never>?
+    private var rejectedSources=Set<String>()
+    init(resolve: @escaping @Sendable (String) async throws -> ExtractedMedia = {
+        // Match Find streams, including its bounded native dimension/location
+        // inspection for provider MP4 links that do not expose a complete size.
+        try await OnDeviceExtractor.shared.resolve($0)
+    }) { self.resolve=resolve }
+
+    static func document(_ value: String) -> URL? {
+        guard var parts=URLComponents(string:value),parts.scheme=="https",parts.host != nil,
+              parts.user==nil,parts.password==nil else { return nil }
+        parts.fragment=nil;return parts.url
+    }
+    func result(for address: String, within seconds: Double) async -> ExtractedMedia? {
+        guard let url=Self.document(address),!Task.isCancelled else { return nil }
+        if page != url || job == nil {
+            clear();page=url
+            let resolve=resolve
+            job=Task { try? await resolve(url.absoluteString) }
+        }
+        guard let job else { return nil }
+        let (stream,continuation)=AsyncStream<ExtractedMedia>.makeStream(bufferingPolicy:.bufferingNewest(1))
+        let waiter=Task {
+            if let value=await job.value,!Task.isCancelled { continuation.yield(value) }
+            continuation.finish()
+        }
+        let deadline=Task {
+            do { try await Task.sleep(for:.seconds(max(0,seconds))) } catch { return }
+            continuation.finish()
+        }
+        defer { waiter.cancel();deadline.cancel();continuation.finish() }
+        var iterator=stream.makeAsyncIterator()
+        return await iterator.next()
+    }
+    func higherSource(in media:ExtractedMedia?,than original:MediaCandidate,decodedHeight:Int=0)->MediaCandidate? {
+        guard let media else { return nil }
+        return ExtractedMedia(streams:media.streams.filter { !rejectedSources.contains($0.candidate.source) })
+            .higherSource(than:original,decodedHeight:decodedHeight)
+    }
+    func reject(_ candidate:MediaCandidate) { rejectedSources.insert(candidate.source) }
+    func clear() { job?.cancel();job=nil;page=nil;rejectedSources.removeAll() }
+}

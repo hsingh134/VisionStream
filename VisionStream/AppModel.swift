@@ -16,6 +16,9 @@ final class AppModel {
     let playback = PlaybackModel(automaticallyDetectFormat: true)
     let library = VRLibraryModel()
     let extractor = ExtractorModel()
+    @ObservationIgnored var automaticSources = AutomaticStreamResolver()
+    private(set) var qualitySearchMessage: String?
+    private(set) var qualitySearchRunning = false
     let downloads: DownloadModel
     let hlsDownloads: HLSOfflineLibrary
     var queuedSaves:[QueuedSave]=[]
@@ -75,7 +78,8 @@ final class AppModel {
         for job in self.hlsDownloads.videos {
             self.history.record(.restoredDownload,context:job.diagnosticContext,labels:["phase":job.state.rawValue,"reason":job.diagnosticContext == nil ? "legacy-unlinked":"restored-existing-job"],numbers:["savedBytes":Double(job.bytes),"progress":job.fraction],codes:job.failureCodes ?? [])
         }
-        tabs.onNavigation = { [weak playback, weak library, weak extractor] in
+        tabs.onNavigation = { [weak self, weak playback, weak library, weak extractor] in
+            self?.automaticSources.clear()
             playback?.cancelPreparation()
             playback?.resetDiagnosticsWhenIdle()
             library?.clear()
@@ -86,6 +90,41 @@ final class AppModel {
             simulatorObservation = SimulatorTestMonitor.observe(app: self)
         }
         #endif
+    }
+
+    /// Runs once per immersive entry (and when Highest is selected). Resolution
+    /// continues while the current video plays; switching may briefly buffer.
+    func upgradeStreamingQualityIfNeeded() async {
+        guard playback.quality == .highest,!playback.isOffline,!qualitySearchRunning else { return }
+        let sourceBrowser=browser,version=browser.navigationVersion
+        let limit=Date().addingTimeInterval(20)
+        while (!playback.isReady || playback.decodedHeight==0) && Date()<limit && !Task.isCancelled {
+            if !playback.isReady && !playback.isPreparing && playback.errorMessage != nil { return }
+            try? await Task.sleep(for:.milliseconds(100))
+        }
+        guard !Task.isCancelled,playback.isReady,playback.immersiveActive,
+              let original=playback.diagnosticCandidate,
+              let page=AutomaticStreamResolver.document(original.pageURL),
+              page==AutomaticStreamResolver.document(sourceBrowser.address),
+              browser === sourceBrowser,sourceBrowser.navigationVersion==version else { return }
+        qualitySearchRunning=true;qualitySearchMessage="Checking for a higher-resolution source…"
+        defer { qualitySearchRunning=false }
+        let found=await automaticSources.result(for:page.absoluteString,within:25)
+        guard !Task.isCancelled,playback.isReady,playback.immersiveActive,playback.quality == .highest,
+              playback.diagnosticCandidate?.id==original.id,browser === sourceBrowser,
+              sourceBrowser.navigationVersion==version,AutomaticStreamResolver.document(sourceBrowser.address)==page else { qualitySearchMessage=nil;return }
+        guard var higher=automaticSources.higherSource(in:found,than:original,decodedHeight:playback.decodedHeight) else {
+            qualitySearchMessage="No higher-resolution source was found.";return
+        }
+        higher=higher.withBrowserFormatContext(page:page,title:sourceBrowser.pageTitle,candidates:sourceBrowser.candidates)
+        qualitySearchMessage="Switching to a higher-resolution source…"
+        guard let higherURL=URL(string:higher.source) else { return }
+        let cookies=await sourceBrowser.cookies(for:higherURL)
+        guard !Task.isCancelled,playback.quality == .highest,playback.immersiveActive,
+              browser === sourceBrowser,sourceBrowser.navigationVersion==version,AutomaticStreamResolver.document(sourceBrowser.address)==page,playback.diagnosticCandidate?.id==original.id else { qualitySearchMessage=nil;return }
+        let upgraded=await playback.upgradeSource(higher,cookies:cookies)
+        if !upgraded,!Task.isCancelled { automaticSources.reject(higher) }
+        qualitySearchMessage=Task.isCancelled ? nil : (upgraded ? "Higher-resolution source selected." : "The higher-resolution source could not be opened; the previous source was restored where available.")
     }
 
     func setDiagnosticsEnabled(_ enabled:Bool) {

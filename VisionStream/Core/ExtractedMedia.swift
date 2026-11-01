@@ -40,6 +40,16 @@ public struct ExtractedMedia: Sendable {
         ranked(streams).first { $0.unavailableReason == nil }
     }
 
+    /// Only a declared increase in picture height justifies replacing the
+    /// active stream. Ignore protected/header-dependent/separate-audio results.
+    public func higherSource(than original: MediaCandidate, decodedHeight: Int = 0) -> MediaCandidate? {
+        let baseline=max(original.height,decodedHeight)
+        return Self.ranked(streams).first {
+            $0.unavailableReason == nil && $0.candidate.source != original.source &&
+            $0.candidate.height > baseline
+        }?.candidate
+    }
+
     private struct Payload: Decodable { let status: String; let streams: [Stream] }
     private struct Stream: Decodable {
         let source: String; let mimeType: String; let width: Int; let height: Int; let unavailableReason: String

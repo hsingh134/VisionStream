@@ -8,6 +8,12 @@ A native web browser and immersive video player for Apple Vision Pro. Browse a w
 
 VisionStream has automated simulator coverage on visionOS 26 and 27 and has been installed on a physical Vision Pro. Physical-headset playback, comfort and broad website compatibility still need testing. It is not currently available through the App Store or TestFlight.
 
+## Automatic highest-quality streaming (0.17.0)
+
+With quality set to **Highest**, pressing the website’s Play button checks for higher-resolution sources automatically before opening VR. A slow lookup can finish while the original source plays and trigger an automatic upgrade in the same immersive view. Position, pause state and VR format are retained; switching may briefly buffer. Find streams remains available for manual inspection but is no longer required for this check.
+
+**Adaptive** keeps connection-based selection within the current stream. Automatic discovery does not export browser credentials or bypass site controls. Source offers, expiry, account access and decoder support can limit the available quality; failed upgrades attempt to restore the previous stream. See [installation and use](Docs/INSTALLATION.md) and [verification](Docs/TESTING.md).
+
 ## Source quality and website controls (0.16.1)
 
 Find streams now ranks usable entries by reported resolution, including entries labelled only “1440p”, and offers **Try highest resolution**. Highest in playback applies to the selected source’s playlist; another source on the website may offer more. Returning from VR keeps that page’s player inline so its settings remain usable. Choose Watch in VR manually or Video tools → Resume automatic VR on this page; navigation/reload also clears the hold.

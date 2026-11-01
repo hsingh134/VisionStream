@@ -1,5 +1,11 @@
 # Technical architecture
 
+## Automatic source upgrades (0.17.0)
+
+`AutomaticStreamResolver` performs one metadata lookup using the same bounded native dimension/location refinement as Find streams per exact HTTPS document, shared by the pre-handoff eight-second wait and the immersive follow-up (25-second wait). AsyncStream separates the UI deadline/cancellation from a serial Python request that may finish later. Navigation/reload cancels and clears cached results/rejected sources; signed source URLs are neither rewritten nor persisted by this cache. Credentials are not passed to the embedded extractor. Unsupported/protected/header-dependent sources remain excluded. Ranking is by reported picture height; the active decoded height prevents a reported result from downgrading a higher adaptive rendition.
+
+The browser's existing operation/tab/navigation checks guard automatic selection and fallback. Immersive Highest mode checks after decoded frames are available; it does not poll repeatedly or interfere with Adaptive/offline playback. `PlaybackModel.upgradeSource` preserves current time, pause state, accepted projection/packing and eye flags, tries one higher candidate and requires an actual higher decoded frame. A materially different finite duration is rejected as a potentially different cut. Ordinary failure attempts the previous source; cancellation/exit never resurrects it. A rejected source is not retried automatically again for that loaded page. Network/decoding can interrupt playback briefly; this is not a seamless dual-player switch or a guarantee that every website source can be resolved.
+
 ## Page playback and source reporting (0.16.1)
 
 Each BrowserModel owns a temporary automatic-handoff pause. Native return/exit sets it; ordinary website Play events are consumed without reopening VR, while explicit Watch remains available. Tab changes preserve each tab’s pause; navigation resets it. The persistent global preference is independent.

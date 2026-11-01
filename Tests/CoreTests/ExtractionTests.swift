@@ -17,6 +17,16 @@ final class ExtractionTests: XCTestCase {
         ]]])
     }
 
+    func testHigherSourceRejectsUnavailableAndAlreadyDecodedQuality() throws {
+        let original=MediaCandidate(id:"low",source:"https://cdn.example/low.mp4",height:720)
+        let high=try ExtractedMedia.parse(document())
+        XCTAssertEqual(high.higherSource(than:original)?.height,1440)
+        XCTAssertNil(high.higherSource(than:original,decodedHeight:1440))
+        for reason in ["protected","required_headers","separate_audio","projection"] {
+            XCTAssertNil(try ExtractedMedia.parse(document(reason:reason)).higherSource(than:original))
+        }
+    }
+
     func testResolvedFormatsAndPrivateDisplay() throws {
         let mp4 = try ExtractedMedia.parse(document()).streams[0]
         XCTAssertEqual(mp4.label, "MP4 · 2880 × 1440")

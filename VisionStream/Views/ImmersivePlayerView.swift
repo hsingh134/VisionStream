@@ -64,6 +64,7 @@ import SwiftUI
             app.playback.controls.toggle()
         })
         .onAppear { app.history.record(.lifecycle,context:app.playback.diagnosticContext,labels:["phase":"immersive-opened"]); app.playback.immersiveActive = true }
+        .task(id: app.playback.quality) { await app.upgradeStreamingQualityIfNeeded() }
         .onDisappear {
             app.browser.useWebsiteControls()
             #if targetEnvironment(simulator)

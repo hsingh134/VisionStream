@@ -29,6 +29,7 @@ import SwiftUI
     @State private var dialogText = ""
     @State private var operation = UUID()
     @State private var preparingTask: Task<Void, Never>?
+    @State private var findingHigherQuality=false
 
     private var selected: MediaCandidate? {
         playableCandidates.first { $0.id == selectedID } ?? MediaCandidate.preferredForPlayback(in: playableCandidates)
@@ -166,9 +167,10 @@ import SwiftUI
                     }
                     if app.playback.isPreparing || app.playback.openingImmersive {
                         ProgressView().controlSize(.small)
+                        if findingHigherQuality { Text("Finding highest quality…").font(.callout) }
                         Button("Cancel") { cancel() }
                     } else {
-                        Button("Watch in VR", systemImage: "vision.pro") { if let selected { watch(selected) } }
+                        Button("Watch in VR", systemImage: "vision.pro") { if let selected { watch(selected,discoverHighest:true) } }
                             .keyboardShortcut("v", modifiers: [.command, .shift])
                             .buttonStyle(.borderedProminent)
                             .disabled(selected?.compatibility != .candidate || app.playback.openingImmersive || app.playback.immersiveActive)
@@ -379,7 +381,7 @@ import SwiftUI
                   app.browser.dialog == nil, !app.playback.isPreparing, !app.playback.openingImmersive,
                   !app.playback.immersiveActive else { return }
             selectedID=media.id
-            watch(media)
+            watch(media,discoverHighest:true)
         }
         #if targetEnvironment(simulator)
         if SimulatorScenarioRunner.isRequested {
@@ -403,7 +405,8 @@ import SwiftUI
     }
 
     private func cancel() {
-        operation = UUID(); preparingTask?.cancel(); preparingTask = nil
+        operation = UUID(); preparingTask?.cancel(); preparingTask = nil;findingHigherQuality=false
+        app.playback.openingImmersive=false
         app.playback.cancelPreparation()
     }
 
@@ -433,7 +436,7 @@ import SwiftUI
         watch(stream.candidate)
     }
 
-    private func watch(_ media: MediaCandidate, saved: SavedVideo? = nil, savedHLS: SavedHLSVideo? = nil) {
+    private func watch(_ media: MediaCandidate, saved: SavedVideo? = nil, savedHLS: SavedHLSVideo? = nil, discoverHighest: Bool = false) {
         guard !app.playback.openingImmersive, !app.playback.immersiveActive else { return }
         cancel()
         let token = UUID(); operation = token
@@ -445,8 +448,8 @@ import SwiftUI
         // Reserve the transition before awaiting cookies to prevent double launches.
         app.playback.openingImmersive = true
         preparingTask = Task { @MainActor in
-            defer { app.playback.openingImmersive = false }
-            let ready: Bool
+            defer { if operation == token { app.playback.openingImmersive = false;findingHigherQuality=false } }
+            var ready: Bool
             var requestedMedia = media
             if let saved {
                 ready = await app.playback.prepareSavedVideo(saved, store: app.downloads.store)
@@ -454,6 +457,22 @@ import SwiftUI
                 ready = await app.playback.prepareSavedHLS(savedHLS, store: app.hlsDownloads.store)
             } else {
                 requestedMedia = sourceBrowser.freshCandidate(for: media)
+                let detected=requestedMedia
+                if discoverHighest,app.playback.quality == .highest,
+                   let page=AutomaticStreamResolver.document(detected.pageURL),
+                   page==AutomaticStreamResolver.document(sourceBrowser.address) {
+                    findingHigherQuality=true
+                    app.history.record(.quality,context:sourceBrowser.diagnosticContext,labels:["phase":"automatic-source-search-started"])
+                    let found=await app.automaticSources.result(for:page.absoluteString,within:8)
+                    guard !Task.isCancelled,operation==token,app.browser === sourceBrowser,sourceBrowser.navigationVersion==navigationVersion,AutomaticStreamResolver.document(sourceBrowser.address)==page else { return }
+                    if let higher=app.automaticSources.higherSource(in:found,than:detected) {
+                        requestedMedia=higher.withBrowserFormatContext(page:page,title:sourceBrowser.pageTitle,candidates:sourceBrowser.candidates)
+                        requestedMedia.currentTime=sourceBrowser.freshCandidate(for:detected).currentTime
+                        if let hint=detected.formatHint { requestedMedia.formatHint=hint }
+                    }
+                    findingHigherQuality=false
+                    app.history.record(.quality,context:sourceBrowser.diagnosticContext,labels:["phase":requestedMedia.source == detected.source ? "automatic-source-search-original":"automatic-source-search-higher"],numbers:["reportedHeight":Double(requestedMedia.height)])
+                }
                 guard let url = URL(string: requestedMedia.source) else { return }
                 var cookies = await sourceBrowser.cookies(for: url)
                 guard !Task.isCancelled, operation == token, app.browser === sourceBrowser, sourceBrowser.navigationVersion == navigationVersion else { return }
@@ -467,6 +486,17 @@ import SwiftUI
                     app.history.record(.playback, context: sourceBrowser.diagnosticContext, labels: ["phase": "refresh-detected-source-before-handoff"])
                 }
                 ready = await app.playback.prepare(requestedMedia, cookies: cookies, userAgent: userAgent, cookieProvider: { [weak sourceBrowser] url in await sourceBrowser?.cookies(for: url) ?? [] })
+                if !ready,requestedMedia.source != detected.source,!Task.isCancelled,operation==token,
+                   app.browser === sourceBrowser,sourceBrowser.navigationVersion==navigationVersion {
+                    app.automaticSources.reject(requestedMedia)
+                    requestedMedia=sourceBrowser.freshCandidate(for:detected)
+                    if let fallbackURL=URL(string:requestedMedia.source) {
+                        let fallbackCookies=await sourceBrowser.cookies(for:fallbackURL)
+                        guard !Task.isCancelled,operation==token,app.browser === sourceBrowser,sourceBrowser.navigationVersion==navigationVersion else { return }
+                        app.history.record(.quality,context:sourceBrowser.diagnosticContext,labels:["phase":"automatic-source-search-fallback"])
+                        ready=await app.playback.prepare(requestedMedia,cookies:fallbackCookies,userAgent:userAgent,cookieProvider:{ [weak sourceBrowser] in await sourceBrowser?.cookies(for:$0) ?? [] })
+                    }
+                }
             }
             if !ready, app.history.isTestingEnabled {
                 Task { @MainActor in await sourceBrowser.captureTestingReadiness(phase:"native-preparation-failed") }

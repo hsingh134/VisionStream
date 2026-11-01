@@ -433,10 +433,13 @@ final class PlaybackModel {
         guard quality != value else { return }
         quality = value
         guard var candidate = originalCandidate, isReady, URL(string: candidate.source)?.isFileURL != true else { return }
-        let resume = isPlaying || isBuffering
+        let resume = player.rate > 0 || player.timeControlStatus != .paused
         candidate.currentTime = player.currentTime().seconds
         let cookies = playbackCookies, agent = playbackAgent, provider = cookieProvider
         qualityChange?.cancel()
+        // Reserve the transition synchronously. Otherwise the old paused item's
+        // ready/dimension flags can enable Play before the replacement task runs.
+        isPreparing=true;isReady=false
         qualityChange = Task { @MainActor [weak self] in
             guard let self else { return }
             if await self.prepare(candidate, cookies: cookies, userAgent: agent, cookieProvider: provider), !Task.isCancelled {
@@ -444,6 +447,61 @@ final class PlaybackModel {
                 self.play()
             }
         }
+    }
+
+    /// Try one higher source, retaining timeline, pause state and the user's
+    /// geometry. Restore the previous source on a normal failure, never after
+    /// cancellation/exit. This uses the same supported cookie/player APIs.
+    func upgradeSource(_ higher:MediaCandidate,cookies:[HTTPCookie]) async -> Bool {
+        guard isReady,quality == .highest,!isOffline,!isAudioInterrupted,var previous=originalCandidate else { return false }
+        // The periodic UI flags can lag the first decoded frame. Query AVPlayer
+        // directly so a fast upgrade cannot turn a fresh Play into a pause.
+        let resume=player.rate>0 || player.timeControlStatus != .paused
+        let position=player.currentTime().seconds
+        let oldDuration=duration,oldHeight=decodedHeight
+        let oldCookies=playbackCookies,agent=playbackAgent,provider=cookieProvider
+        let format=(presentation,layout,swapEyes,flipY,automaticallyDetectFormat)
+        let evidence=(knownProjection,knownLayout,nativeProjectionIdentified,embeddedFormatHint,formatStatus)
+        previous.currentTime=position.isFinite ? max(0,position):elapsed
+        var next=higher;next.currentTime=previous.currentTime
+        // Hold the already accepted geometry across both replacement/rollback.
+        automaticallyDetectFormat=false
+        defer {
+            presentation=format.0;layout=format.1;swapEyes=format.2;flipY=format.3
+            automaticallyDetectFormat=format.4
+            knownProjection=evidence.0;knownLayout=evidence.1;nativeProjectionIdentified=evidence.2
+            embeddedFormatHint=evidence.3;formatStatus=evidence.4
+        }
+        diagnostics?.record(.quality,context:diagnosticContext,labels:["phase":"automatic-source-upgrade-started"],numbers:["reportedHeight":Double(higher.height),"previousDecodedHeight":Double(oldHeight)])
+        var ready=await prepare(next,cookies:cookies,userAgent:agent,cookieProvider:provider)
+        guard !Task.isCancelled else { return false }
+        if ready,oldDuration>0,duration>0,abs(oldDuration-duration)>max(3,oldDuration*0.03) {
+            ready=false // Different preview/cut: timestamps are not interchangeable.
+        }
+        if ready {
+            pauseAfterFrame = !resume;play()
+            // A ready item is not proof of an upgrade. Require a real higher-
+            // resolution decoded frame before reporting success.
+            let deadline=Date().addingTimeInterval(8)
+            while isReady,Date()<deadline,!Task.isCancelled {
+                var height=decodedHeight
+                if let output=videoOutput,output.hasNewPixelBuffer(forItemTime:player.currentTime()),
+                   let buffer=output.copyPixelBuffer(forItemTime:player.currentTime(),itemTimeForDisplay:nil) {
+                    height=max(height,CVPixelBufferGetHeight(buffer))
+                }
+                if height>max(oldHeight,previous.height) {
+                    diagnostics?.record(.quality,context:diagnosticContext,labels:["phase":"automatic-source-upgrade-decoded"],numbers:["decodedHeight":Double(height)])
+                    return true
+                }
+                try? await Task.sleep(for:.milliseconds(50))
+            }
+        }
+        diagnostics?.record(.quality,context:diagnosticContext,labels:["phase":"automatic-source-upgrade-fallback"])
+        guard !Task.isCancelled else { return false }
+        if await prepare(previous,cookies:oldCookies,userAgent:agent,cookieProvider:provider),!Task.isCancelled {
+            pauseAfterFrame = !resume;play()
+        }
+        return false
     }
 
     func manualFormat() { automaticallyDetectFormat = false; formatStatus = "Manual format" }

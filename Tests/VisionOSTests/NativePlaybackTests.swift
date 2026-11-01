@@ -64,6 +64,8 @@ final class NativePlaybackTests: XCTestCase {
         playback.pause(); playback.seek(to: 2)
         try await waitUntil { !playback.isSeeking }
         playback.changeQuality(.highest)
+        XCTAssertTrue(playback.isPreparing,"Quality replacement must reserve its transition before returning")
+        XCTAssertFalse(playback.isReady,"The old paused item must not re-enable Play during replacement")
         try await waitUntil({ playback.decodedWidth == 1440 && !playback.isPlaying && playback.isReady }, seconds: 30)
         XCTAssertEqual(playback.player.currentTime().seconds, 2, accuracy: 0.3)
         XCTAssertTrue(renderer.video.isEnabled)

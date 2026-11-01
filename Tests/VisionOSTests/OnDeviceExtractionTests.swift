@@ -148,3 +148,87 @@ private actor SuspendedResolution {
         continuation = nil
     }
 }
+
+@MainActor final class AutomaticSourceQualityTests:XCTestCase {
+    private func media(_ source:String,height:Int=1440) throws -> ExtractedMedia {
+        try ExtractedMedia.parse(JSONSerialization.data(withJSONObject:["status":"ok","streams":[["source":source,"mimeType":"video/mp4","width":height*2,"height":height,"unavailableReason":""]]]))
+    }
+    func testShortWaitReturnsWhileLateMetadataRemainsAvailableWithoutSecondRequest() async throws {
+        let gate=SuspendedResolution(),finder=AutomaticStreamResolver(resolve:{ _ in await gate.resolve() })
+        let result=Task { await finder.result(for:"https://video.example/watch#player",within:0.05) }
+        await gate.waitForStart()
+        let early=await result.value;XCTAssertNil(early)
+        try await gate.finish()
+        let late=await finder.result(for:"https://video.example/watch",within:1)
+        XCTAssertEqual(late?.streams.first?.candidate.height,512)
+        finder.clear()
+    }
+    func testCancellationReturnsAndNavigationDiscardsTheOldLookup() async throws {
+        let gate=SuspendedResolution(),finder=AutomaticStreamResolver(resolve:{ _ in await gate.resolve() })
+        let result=Task { await finder.result(for:"https://video.example/one",within:30) }
+        await gate.waitForStart();result.cancel()
+        let cancelled=await result.value;XCTAssertNil(cancelled)
+        finder.clear();try await gate.finish()
+    }
+    func testInvalidPageNeverCallsResolverAndUpgradeOnlyChoosesAnActualIncrease() async throws {
+        let finder=AutomaticStreamResolver(resolve:{ _ in throw ExtractionError.runtime })
+        let invalid=await finder.result(for:"https://user:password@video.example/watch",within:1);XCTAssertNil(invalid)
+        let found=try media("https://cdn.example/high.mp4")
+        let low=MediaCandidate(id:"low",source:"https://cdn.example/low.mp4",height:720)
+        XCTAssertEqual(found.higherSource(than:low)?.height,1440)
+        XCTAssertNil(found.higherSource(than:low,decodedHeight:2160))
+        XCTAssertNil(found.higherSource(than:found.streams[0].candidate))
+        XCTAssertNotNil(finder.higherSource(in:found,than:low))
+        finder.reject(found.streams[0].candidate)
+        XCTAssertNil(finder.higherSource(in:found,than:low))
+        finder.clear();XCTAssertNotNil(finder.higherSource(in:found,than:low))
+    }
+    func testSourceUpgradePreservesPausedTimelineAndVRFormatAndRollsBackFailure() async throws {
+        let base=try XCTUnwrap(ProcessInfo.processInfo.environment["VISIONSTREAM_TEST_ORIGIN"])
+        let p=PlaybackModel(automaticallyDetectFormat:true);p.player.isMuted=true;defer { p.stop() }
+        let low=MediaCandidate(id:"low",source:base+"/quality/master.m3u8",mimeType:"application/vnd.apple.mpegurl",pageURL:base+"/quality.html",height:720,currentTime:2)
+        let first=await p.prepare(low,cookies:[]);XCTAssertTrue(first);guard first else { return }
+        p.manualFormat();p.presentation = .vr180;p.layout = .sideBySide;p.swapEyes=true;p.flipY=true
+        p.pause()
+        let high=MediaCandidate(id:"high",source:base+"/quality-4k/master.m3u8",mimeType:"application/vnd.apple.mpegurl",pageURL:low.pageURL,height:1920)
+        let upgraded=await p.upgradeSource(high,cookies:[]);XCTAssertTrue(upgraded)
+        XCTAssertEqual(p.diagnosticCandidate?.id,"high");XCTAssertEqual(p.presentation,.vr180);XCTAssertEqual(p.layout,.sideBySide)
+        XCTAssertTrue(p.swapEyes);XCTAssertTrue(p.flipY);XCTAssertFalse(p.automaticallyDetectFormat)
+        XCTAssertEqual(p.player.currentTime().seconds,2,accuracy:0.3)
+        p.receivedFrame(width:3840,height:1920);XCTAssertFalse(p.isPlaying)
+        p.automaticallyDetectFormat=true
+        let bad=MediaCandidate(id:"bad",source:base+"/missing-auto-high.mp4",mimeType:"video/mp4",height:2160)
+        let failed=await p.upgradeSource(bad,cookies:[]);XCTAssertFalse(failed)
+        XCTAssertTrue(p.isReady);XCTAssertEqual(p.diagnosticCandidate?.id,"high");XCTAssertNil(p.errorMessage)
+        XCTAssertEqual(p.player.currentTime().seconds,2,accuracy:0.4)
+        XCTAssertEqual(p.layout,.sideBySide);XCTAssertTrue(p.swapEyes);XCTAssertTrue(p.automaticallyDetectFormat)
+        p.receivedFrame(width:3840,height:1920);XCTAssertFalse(p.isPlaying)
+    }
+    func testCancelledUpgradeDoesNotResurrectPlayback() async throws {
+        let base=try XCTUnwrap(ProcessInfo.processInfo.environment["VISIONSTREAM_TEST_ORIGIN"])
+        let p=PlaybackModel();p.player.isMuted=true;defer { p.stop() }
+        let ready=await p.prepare(.init(id:"old",source:base+"/quality/master.m3u8",mimeType:"application/vnd.apple.mpegurl"),cookies:[])
+        XCTAssertTrue(ready);guard ready else { return }
+        let task=Task { await p.upgradeSource(.init(id:"slow",source:base+"/delayed/controls-demo.mp4",mimeType:"video/mp4",height:2160),cookies:[]) }
+        let deadline=Date().addingTimeInterval(3)
+        while !p.isPreparing,Date()<deadline { await Task.yield() }
+        XCTAssertTrue(p.isPreparing);task.cancel();p.stop()
+        let result=await task.value;XCTAssertFalse(result)
+        try await Task.sleep(for:.milliseconds(200))
+        XCTAssertFalse(p.isReady);XCTAssertFalse(p.isPreparing);XCTAssertNil(p.player.currentItem)
+    }
+
+    func testImmediateUpgradeUsesLivePlayIntentInsteadOfStaleUIFlags() async throws {
+        let base=try XCTUnwrap(ProcessInfo.processInfo.environment["VISIONSTREAM_TEST_ORIGIN"])
+        let p=PlaybackModel();p.player.isMuted=true;defer { p.stop() }
+        let ready=await p.prepare(.init(id:"low",source:base+"/quality/master.m3u8",mimeType:"application/vnd.apple.mpegurl",height:720),cookies:[])
+        XCTAssertTrue(ready);guard ready else { return }
+        p.play()
+        XCTAssertFalse(p.isPlaying,"The UI poll has not run yet; it must not determine resume intent")
+        XCTAssertGreaterThan(p.player.rate,0)
+        let upgraded=await p.upgradeSource(.init(id:"higher",source:base+"/quality-4k/master.m3u8",mimeType:"application/vnd.apple.mpegurl",height:1920),cookies:[])
+        XCTAssertTrue(upgraded);p.receivedFrame(width:3840,height:1920)
+        XCTAssertGreaterThan(p.player.rate,0,"The first replacement frame must keep moving")
+    }
+
+}

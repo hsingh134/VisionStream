@@ -220,7 +220,13 @@ import SwiftUI
                 }.buttonStyle(.plain)
             }
             Text(app.playback.qualityStatus).font(.caption).foregroundStyle(.secondary)
-            Text("Highest selects within this source’s playlist. The website or Find streams may offer other sources at higher resolutions.")
+            if let message=app.qualitySearchMessage,app.playback.quality == .highest {
+                HStack {
+                    if app.qualitySearchRunning { ProgressView().controlSize(.small) }
+                    Text(message).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Text("Highest checks for higher-resolution sources automatically and selects the highest supported rendition. Switching sources may briefly buffer.")
                 .font(.caption).foregroundStyle(.secondary)
             if immersive && !app.playback.isOffline {
                 Button("Open website controls",systemImage:"safari") { Task { await returnToPage() } }

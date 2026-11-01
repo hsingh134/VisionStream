@@ -133,6 +133,7 @@ import Foundation
             ("explicit native HTTP status redaction", diagnostics.testCoreMediaReportedHTTPStatusRetainsOnlyExplicitBoundedDigits),
             ("missing resource guidance", diagnostics.testMissingResourceHintDoesNotInventHTTPStatusOrExposeDetails),
             ("complete flat frame", projection.testScreenFitsCompleteFrameWithUprightUVs),
+            ("higher source boundaries", extraction.testHigherSourceRejectsUnavailableAndAlreadyDecodedQuality),
             ("resolved formats and private display", extraction.testResolvedFormatsAndPrivateDisplay),
             ("unsupported extraction features", extraction.testUnsupportedFeaturesRemainBlocked),
             ("request context advisory", extraction.testHeaderAdvisoryDoesNotBlockOrExposeRequestInformation),

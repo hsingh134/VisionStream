@@ -1,10 +1,16 @@
 # Installation and signing
 
+## Automatic highest quality (0.17.0)
+
+Leave streaming quality on **Highest**. A normal website Play gesture checks the individual HTTPS page with the bundled source finder before opening VR. The first wait is limited to eight seconds; if it takes longer, the detected source opens and the same lookup continues during playback. Once a higher-resolution compatible source is found, VisionStream switches automatically at the current position, retaining pause state and VR geometry. Expect a short buffering interruption when switching sources. No extra Find streams action is required.
+
+Choosing **Adaptive** stops automatic source upgrades. It lets AVPlayer adapt within the current playlist. Returning to the website still keeps its settings usable; Watch in VR resumes native playback manually. Automatic discovery uses public metadata requests without exporting browser credentials, so browser-only account sources may remain unavailable. Unknown dimensions cannot establish a higher resolution. A failed upgrade tries to restore the previous source; an expired old link may also fail.
+
 ## Website controls and higher-quality sources (0.16.1)
 
 From native playback choose **Return to page**, or **Streaming quality → Open website controls**. Automatic VR is paused for that page so the website’s Play/quality controls stay usable. Choose **Watch in VR** to return manually, **Video tools → Resume automatic VR on this page**, or navigate to another page. The global Browser setting is unchanged. Turn **Open videos in VR when I press Play** off in Browser settings if you want browser playback throughout the session, including after navigation/reload.
 
-**Find streams** now orders available options by reported height and offers **Try highest resolution**. A source labelled 1440p has more vertical pixels than 2160 × 1080 (1080p), even if its width is not reported. Native playback still needs checking; the player header gives the actual decoded size. Highest in the native quality panel selects within the chosen playlist, not every source on a website.
+**Find streams** now orders available options by reported height and offers **Try highest resolution**. A source labelled 1440p has more vertical pixels than 2160 × 1080 (1080p), even if its width is not reported. Native playback still needs checking; the player header gives the actual decoded size. In 0.16.1, Highest selected within the chosen playlist. Version 0.17.0 additionally checks alternate sources automatically as described above.
 
 
 ## Picture quality (0.16.0)

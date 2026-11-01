@@ -17,7 +17,7 @@ import Darwin
             return from(ProcessInfo.processInfo.environment)
         }
         static func from(_ env: [String: String]) -> Self? {
-            let names: Set<String> = ["image-quality", "diagnostics", "controls-hide", "tabs", "auto-play", "soak", "saved-state", "downloads", "forms", "quality", "quality4k", "controls", "controls-format", "controls-quality", "mp4", "hls", "library", "library-hls", "cancel", "unsupported", "finder", "reentry", "interrupted"]
+            let names: Set<String> = ["image-quality", "diagnostics", "controls-hide", "tabs", "auto-play", "auto-upgrade", "soak", "saved-state", "downloads", "forms", "quality", "quality4k", "controls", "controls-format", "controls-quality", "mp4", "hls", "library", "library-hls", "cancel", "unsupported", "finder", "reentry", "interrupted"]
             guard let name = env["VISIONSTREAM_SCENE_TEST"], names.contains(name),
                   let raw = env["VISIONSTREAM_TEST_ORIGIN"], let url = URL(string: raw),
                   url.scheme == "https", ["127.0.0.1", "localhost"].contains(url.host ?? ""),
@@ -170,7 +170,7 @@ import Darwin
         if config.name == "tabs" { try await browserTabs(config, app: app); return }
         if config.name == "forms" { try await forms(config, app: app); return }
         if config.name == "diagnostics" { try await diagnosticChecks(config,app:app);return }
-        if config.name == "auto-play" { try await automaticPlayback(config,app:app);return }
+        if config.name == "auto-play" || config.name == "auto-upgrade" { try await automaticPlayback(config,app:app);return }
         let path = config.name == "image-quality" ? "quality-audit.html" : ["quality4k", "soak"].contains(config.name) ? "quality-4k.html" : (["quality", "quality4k", "soak"].contains(config.name) || config.name.hasPrefix("controls")) ? "quality.html" : ["mp4", "reentry", "interrupted"].contains(config.name) ? "automation-mp4" : (config.name == "hls" ? "automation-hls" : "empty-test")
         // Submit through the actual address form action rather than restoring a
         // user's saved page or asking an external UI tool to type while locked.
@@ -527,8 +527,16 @@ import Darwin
         try require(app.browser.candidates.isEmpty && !mounted(.videoBar),"empty-browser-hides-video-bar")
         record("empty-browser-hides-video-bar",app:app)
         app.browser.preferences.openVideosInVR=true
+        let delayed=config.name == "auto-upgrade",origin=config.origin.absoluteString
+        app.automaticSources=AutomaticStreamResolver(resolve:{ _ in
+            if delayed { try await Task.sleep(for:.seconds(14)) }
+            return try ExtractedMedia.parse(JSONSerialization.data(withJSONObject:["status":"ok","streams":[
+                ["source":origin+"/quality-4k/master.m3u8","mimeType":"application/vnd.apple.mpegurl","width":3840,"height":1920,"unavailableReason":""],
+                ["source":origin+"/protected-8k.mp4","mimeType":"video/mp4","width":8192,"height":4096,"unavailableReason":"protected"]
+            ]]),pageURL:origin+"/quality.html")
+        })
         openAddress?();try await wait("automatic-address") { mounted(.address) }
-        submitAddress?(config.origin.appendingPathComponent("quality-4k.html").absoluteString)
+        submitAddress?(config.origin.appendingPathComponent("quality.html").absoluteString)
         try await wait("automatic-page-playing",seconds:45) {
             app.browser.pageHTTPStatus==200 && app.browser.candidates.contains { $0.width>0 } && mounted(.videoBar)
         }
@@ -552,6 +560,10 @@ import Darwin
         }
         let id=UUID().uuidString
         try await signal(id)
+        if delayed {
+            try await wait("automatic-low-native-frame",seconds:30) { app.playback.immersiveActive && app.playback.isPlaying && app.playback.decodedWidth==1440 && app.playback.decodedHeight==720 }
+            record("slow-source-search-starts-original-without-waiting",app:app)
+        }
         try await wait("automatic-native-frame",seconds:45) {
             app.playback.immersiveActive && app.playback.isPlaying && app.playback.decodedWidth==3840 && app.playback.decodedHeight==1920 &&
             mounted(.immersive) && mounted(.playback) && returnAction != nil
