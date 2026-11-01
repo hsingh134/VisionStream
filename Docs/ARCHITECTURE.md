@@ -1,5 +1,12 @@
 # Technical architecture
 
+## Page playback and source reporting (0.16.1)
+
+Each BrowserModel owns a temporary automatic-handoff pause. Native return/exit sets it; ordinary website Play events are consumed without reopening VR, while explicit Watch remains available. Tab changes preserve each tab’s pause; navigation resets it. The persistent global preference is independent.
+
+Finder ordering compares reported height before width, across usable formats; missing width no longer makes a 1440p row lose to 960 × 480. Protected/unsupported rows remain unavailable, and a highest-reported recommendation is not a native-playback guarantee. AVFoundation source inspection checks player-item tracks and bounded later samples when HLS initially exposes none. Separately named HLS declaration fields do not masquerade as decoded track properties. Memory-history samples use explicit UInt64-to-Double numeric conversion; the former function reference could choose the bit-pattern initializer. Historical 0.16.0 events are preserved as evidence, not rewritten.
+
+
 ## Video-quality pipeline (0.16.0)
 
 The rendering path now requests wide-colour linear P3 RGBA16F, validates actual frame metadata and converts to linear sRGB during GPU eye preparation. Original, optional bounded Enhanced and Maximum (mipmaps/anisotropic sampler request) operate independently from source rendition/projection/layout. Mono shares one eye resource and can retain 8192-wide source dimensions within an explicit reported descriptor budget. Mesh density and skybox distance are explicit. See [the complete audit](../VIDEO_QUALITY_AUDIT.md) for the original/corrected pipeline, colour fallback, measurement scope and physical limits.

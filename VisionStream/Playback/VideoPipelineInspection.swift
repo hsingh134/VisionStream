@@ -28,11 +28,18 @@ import Metal
     }
     enum ColorError: Error { case unsupported }
 
-    static func source(_ asset: AVAsset) async -> VideoPipelineSnapshot.Source {
+    static func source(_ asset: AVAsset, item: AVPlayerItem? = nil) async -> VideoPipelineSnapshot.Source {
         var result = VideoPipelineSnapshot.Source()
         do {
-            guard let track = try await asset.loadTracks(withMediaType: .video).first else {
-                result.metadataSample = "No video track exposed"; return result
+            var activeTrack: AVAssetTrack?
+            for itemTrack in item?.tracks ?? [] {
+                if let track=itemTrack.assetTrack, track.mediaType == .video { activeTrack=track;break }
+            }
+            let track:AVAssetTrack?
+            if let activeTrack { track=activeTrack }
+            else { track=try await asset.loadTracks(withMediaType:.video).first }
+            guard let track else {
+                result.metadataSample = "AVFoundation has not exposed a video track; decoded-buffer data remains available. This is not a playback failure."; return result
             }
             let (formats, fps, rate) = try await track.load(.formatDescriptions, .nominalFrameRate, .estimatedDataRate)
             result.nominalFrameRate = fps.isFinite && fps > 0 ? Double(fps) : nil
@@ -53,7 +60,7 @@ import Metal
                 }
                 result.fullRange = CMFormatDescriptionGetExtension(format, extensionKey: kCMFormatDescriptionExtension_FullRangeVideo) as? Bool
             }
-            result.metadataSample = "Asset video-track metadata sampled after preparation; may differ from a later adaptive rendition"
+            result.metadataSample = activeTrack != nil ? "Player-item video track sampled during preparation/playback; may change with adaptive rendition" : "Asset video-track metadata sampled after preparation; may differ from a later adaptive rendition"
         } catch { result.metadataSample = "Unavailable from AVFoundation" }
         return result
     }

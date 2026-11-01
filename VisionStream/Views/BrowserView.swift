@@ -136,6 +136,10 @@ import SwiftUI
             }
             if videoBarVisible {
             VStack(alignment: .leading, spacing: 10) {
+                if browser.automaticVRPausedForPage {
+                    Label("Website controls are active. Use the site’s quality menu, then choose Watch in VR when ready.",systemImage:"safari")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
                 if let hint = PlaybackDiagnostics.webFailureHint(selected?.webMedia?.errorCode) {
                     Text(hint).font(.callout).foregroundStyle(.orange)
                 }
@@ -151,6 +155,9 @@ import SwiftUI
                     }
                     Spacer()
                     Menu("Video tools", systemImage: "wand.and.stars") {
+                        if browser.automaticVRPausedForPage && browser.preferences.openVideosInVR {
+                            Button("Resume automatic VR on this page",systemImage:"visionpro") { browser.resumeAutomaticVRForPage() }
+                        }
                         Button("Scan page again", systemImage: "arrow.clockwise") { browser.scan() }
                         Button("Find more sources", systemImage: "magnifyingglass") { showFinder = true }
                         Button(app.saveInProgress ? "Add to queue" : "Save video", systemImage: "arrow.down.circle") { if let selected { download(selected) } }

@@ -65,6 +65,7 @@ import SwiftUI
         })
         .onAppear { app.history.record(.lifecycle,context:app.playback.diagnosticContext,labels:["phase":"immersive-opened"]); app.playback.immersiveActive = true }
         .onDisappear {
+            app.browser.useWebsiteControls()
             #if targetEnvironment(simulator)
             SimulatorScenarioRunner.rendererBounds = nil
             SimulatorScenarioRunner.rendererPose = nil

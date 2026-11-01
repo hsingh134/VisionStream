@@ -4,6 +4,14 @@ Version 0.16.0 (39), 1 November 2026. Baseline: 0.15.0 (38), commit `583fe1c3043
 
 The changes preserve more decoded precision, correct filtering, retain large mono panoramas, improve geometric accuracy and add reversible picture controls. They do not establish that Vision Pro now looks better than Quest. That comparison needs the same source/rendition, viewpoint, brightness and a physical headset. No physical visual acceptance is claimed.
 
+## 0.16.1 follow-up: selected source versus website offerings
+
+The owner’s two physical 0.16.0 reports decoded 1440 × 720 SBS without texture downscaling; each inspected playlist offered one rendition. This is 720 × 720 per eye and does not establish the website maximum. Selecting a separate finder entry labelled 1440p subsequently produced a user-confirmed **2880 × 1440 decoded header**: four times the packed pixels, or 1440 × 1440 per SBS eye. This observation is not a sustained frame-rate or subjective-quality measurement.
+
+0.16.1 (40) ranks usable finder entries by reported height, then width, so a 1440p entry with unknown width no longer loses to 2160 × 1080. Try highest resolution chooses the highest reported usable entry; availability and native decoding still require checking. Highest inside the player applies to the selected source’s playlist, not every alternate source on the website. Return to page/Open website controls now keep that page inline until manual Watch, automatic-VR resume or navigation/reload.
+
+History now exports memory as numeric bytes rather than interpreting UInt64 bits as Double. HLS source metadata samples actual player-item/asset tracks with bounded retries; manifest declarations remain separately labelled and cannot substitute for decoded-track metadata. Final native suites pass **223 tests with 12 optional skips on each runtime**; final mounted scenes pass **7 scenarios / 72 checks each**. The earlier offscreen WebKit back-stack failure remains recorded separately. Existing 0.16.0 image/GPU benchmark values below were not remeasured or relabelled as new measurements.
+
 ## Original architecture
 
 ```mermaid

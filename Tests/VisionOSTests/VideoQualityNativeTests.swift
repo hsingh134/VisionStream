@@ -30,6 +30,37 @@ import XCTest
         frame.colorPrimaries="ITU_R_2020";frame.transferFunction="SMPTE_ST_2084_PQ"
         XCTAssertThrowsError(try VideoPipelineInspection.colorMode(frame),"Encoded HDR must never be treated as linear")
     }
+    func testPipelineHistoryExportsMemoryAsNumericBytes() throws {
+        let root=FileManager.default.temporaryDirectory.appendingPathComponent("PipelineMemory-"+UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at:root) }
+        let history=SessionDiagnostics(root:root),p=PlaybackModel();p.diagnostics=history
+        let frame=VideoPipelineSnapshot.Frame(width:1440,height:720,pixelFormat:"RGhA",storageBitsPerComponent:16,bytesPerRow:11520,colorPrimaries:"P3_D65",transferFunction:"Linear",yCbCrMatrix:"ITU_R_709_2",presentationSeconds:54)
+        let render=VideoPipelineSnapshot.Render(mode:.maximum,plan:try .init(width:1440,height:720,layout:.sideBySide,mode:.maximum),projection:.vr180,layout:.sideBySide,mipFilter:"linear",maximumAnisotropy:8,horizontalWrap:"clampToEdge",meshColumns:256,meshRows:128,estimatedSourceHorizontalPPD:4,estimatedTextureHorizontalPPD:4,estimatedVerticalPPD:4,panoramaRadiusMetres:1000)
+        var metrics=VideoPipelineSnapshot.Performance();metrics.processFootprintBytes=331_433_136;metrics.metalDeviceAllocatedBytes=128_401_408
+        p.updateVideoPipeline(frame:frame,render:render,performance:metrics)
+        let report=try XCTUnwrap(try JSONSerialization.jsonObject(with:Data(history.report(snapshot:"{}").utf8)) as? [String:Any])
+        let sessions=try XCTUnwrap(report["sessionHistory"] as? [[String:Any]])
+        let event=try XCTUnwrap(sessions.flatMap { $0["events"] as? [[String:Any]] ?? [] }.first { $0["kind"] as? String == "playerMetrics" })
+        let numbers=try XCTUnwrap(event["numbers"] as? [String:Double])
+        XCTAssertEqual(numbers["processFootprint"],331_433_136)
+        XCTAssertEqual(numbers["metalBytes"],128_401_408)
+        XCTAssertEqual(p.videoPipeline.performance.processFootprintBytes,331_433_136)
+    }
+    func testHLSDeclarationsStaySeparateAndDoNotLeakIntoAnotherAttempt() async throws {
+        let p=PlaybackModel();p.player.isMuted=true;defer { p.stop() }
+        let ready=await p.prepare(.init(id:"declaration",source:try origin()+"/quality/master.m3u8",mimeType:"application/vnd.apple.mpegurl"),cookies:[])
+        XCTAssertTrue(ready);guard ready else { return }
+        p.play();let b=try await buffer(p)
+        try await wait { p.videoPipeline.source.declaredHLSCodecs != nil }
+        XCTAssertEqual(p.videoPipeline.source.declaredHLSWidth,1440);XCTAssertEqual(p.videoPipeline.source.declaredHLSHeight,720)
+        XCTAssertTrue(p.videoPipeline.source.declaredHLSCodecs?.contains("avc1") == true)
+        XCTAssertEqual(CVPixelBufferGetWidth(b),1440);XCTAssertEqual(CVPixelBufferGetHeight(b),720)
+        let next=await p.prepare(.init(id:"next",source:try origin()+"/controls-demo.mp4"),cookies:[])
+        XCTAssertTrue(next);guard next else { return }
+        try await wait { p.videoPipeline.source.codec != nil }
+        try await Task.sleep(for:.milliseconds(1200))
+        XCTAssertNil(p.videoPipeline.source.declaredHLSCodecs);XCTAssertNil(p.videoPipeline.source.declaredHLSWidth)
+    }
     func testProductionLinearGPUKernelPreservesEyesPrecisionAndMips() async throws {
         let device=try XCTUnwrap(MTLCreateSystemDefaultDevice()),library=try device.makeDefaultLibrary(bundle:.main)
         let result=try await VideoQualityGPUChecks.run(device:device,library:library,benchmark:false)

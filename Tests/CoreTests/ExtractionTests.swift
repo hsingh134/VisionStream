@@ -58,6 +58,13 @@ final class ExtractionTests: XCTestCase {
         let heightOnly = try ExtractedMedia.parse(JSONSerialization.data(withJSONObject: payload)).streams[0]
         XCTAssertEqual(heightOnly.label, "MP4 · 1440p")
         XCTAssertEqual(heightOnly.candidate.width, 0)
+        let smaller=ExtractedStream(candidate:.init(id:"480",source:"https://cdn.example/480.mp4",mimeType:"video/mp4",width:960,height:480),unavailableCode:"",advisoryCode:"",isAdaptive:false)
+        let fullHD=ExtractedStream(candidate:.init(id:"1080",source:"https://cdn.example/1080.m3u8",mimeType:"application/vnd.apple.mpegurl",width:2160,height:1080),unavailableCode:"",advisoryCode:"",isAdaptive:false)
+        let blocked=ExtractedStream(candidate:.init(id:"blocked",source:"https://cdn.example/2160.mp4",mimeType:"video/mp4",width:3840,height:2160),unavailableCode:"protected",advisoryCode:"",isAdaptive:false)
+        let ranked=ExtractedMedia.ranked([fullHD,smaller,heightOnly,blocked])
+        XCTAssertEqual(ranked.map { $0.candidate.height },[1440,1080,480,2160])
+        XCTAssertEqual(ExtractedMedia.highestReported(in:ranked)?.id,heightOnly.id)
+        XCTAssertNil(ExtractedMedia.highestReported(in:[blocked]))
     }
 
     func testHeaderAdvisoryDoesNotBlockOrExposeRequestInformation() throws {

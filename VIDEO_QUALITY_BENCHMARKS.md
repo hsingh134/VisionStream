@@ -2,6 +2,14 @@
 
 VisionStream 0.16.0 (39), 1 November 2026. Baseline: 0.15.0 (38), `583fe1c`. These are measured texture/geometry tests and controlled simulator integration results, not a perceptual Vision Pro/Quest comparison.
 
+## 0.16.1 follow-up: selected source versus website offerings
+
+The owner’s two physical 0.16.0 reports decoded 1440 × 720 SBS without texture downscaling; each inspected playlist offered one rendition. This is 720 × 720 per eye and does not establish the website maximum. Selecting a separate finder entry labelled 1440p subsequently produced a user-confirmed **2880 × 1440 decoded header**: four times the packed pixels, or 1440 × 1440 per SBS eye. This observation is not a sustained frame-rate or subjective-quality measurement.
+
+0.16.1 (40) ranks usable finder entries by reported height, then width, so a 1440p entry with unknown width no longer loses to 2160 × 1080. Try highest resolution chooses the highest reported usable entry; availability and native decoding still require checking. Highest inside the player applies to the selected source’s playlist, not every alternate source on the website. Return to page/Open website controls now keep that page inline until manual Watch, automatic-VR resume or navigation/reload.
+
+History now exports memory as numeric bytes rather than interpreting UInt64 bits as Double. HLS source metadata samples actual player-item/asset tracks with bounded retries; manifest declarations remain separately labelled and cannot substitute for decoded-track metadata. Final native suites pass **223 tests with 12 optional skips on each runtime**; final mounted scenes pass **7 scenarios / 72 checks each**. The earlier offscreen WebKit back-stack failure remains recorded separately. Existing 0.16.0 image/GPU benchmark values below were not remeasured or relabelled as new measurements.
+
 ## Test environment and evidence
 
 Apple M4 Max host; Xcode 27.1; visionOS 27 SDK; deployment target 26.0; dedicated visionOS 26.0 and 27.0 simulators. Original locally generated CC0 footage only. Sources include 4096 × 2048 VR180 SBS fine lines/checker/text/gradients/stereo disparity/flashing motion marker, a low-bitrate version, 8192 × 4096 Main10 mono, BT.709 full/limited-range colour bars, BT.2020 PQ/HLG steps and a full-range 1,024-step Main10 neutral ramp. No third-party footage was downloaded for this audit.

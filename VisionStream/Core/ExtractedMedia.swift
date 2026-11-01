@@ -21,7 +21,23 @@ public struct ExtractedMedia: Sendable {
                                    isAdaptive: value.adaptive == true && value.mimeType == "application/vnd.apple.mpegurl")
         }
         guard !streams.isEmpty else { throw ExtractionError.status("no_stream") }
-        return .init(streams: streams)
+        return .init(streams: ranked(streams))
+    }
+
+    /// Compare reported picture height even if a provider omits width. A 1440p
+    /// source must not fall below 960x480 merely because its width is unknown.
+    /// This ranks declarations, not verified playback or a provider's full offer.
+    public static func ranked(_ streams:[ExtractedStream]) -> [ExtractedStream] {
+        streams.enumerated().sorted { a,b in
+            func key(_ s:ExtractedStream)->(Int,Int,Int,Int) {
+                (s.unavailableReason == nil ? 0:1,-s.candidate.height,-s.candidate.width,s.isAdaptive ? 0:1)
+            }
+            let x=key(a.element),y=key(b.element)
+            return x == y ? a.offset<b.offset:x<y
+        }.map(\.element)
+    }
+    public static func highestReported(in streams:[ExtractedStream]) -> ExtractedStream? {
+        ranked(streams).first { $0.unavailableReason == nil }
     }
 
     private struct Payload: Decodable { let status: String; let streams: [Stream] }

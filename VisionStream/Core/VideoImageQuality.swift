@@ -80,6 +80,10 @@ public struct VideoPipelineSnapshot: Codable, Sendable {
         public var transferFunction: String?
         public var yCbCrMatrix: String?
         public var fullRange: Bool?
+        public var declaredHLSCodecs: String?
+        public var declaredHLSWidth: Int?
+        public var declaredHLSHeight: Int?
+        public var declaredHLSBitrate: Int?
         public var metadataSample = "Not sampled"
         public init() {}
     }
@@ -152,6 +156,13 @@ public struct VideoPipelineSnapshot: Codable, Sendable {
         "SMPTE_ST_2084_PQ", "ITU_R_2100_HLG", "SMPTE_240M_1995", "SMPTE_C", "P3_D65", "DCI_P3", "EBU_3213", "UseGamma"]
     public static func safeTag(_ value: String?) -> String? {
         value.map { knownTags.contains($0) ? $0 : "unrecognised" }
+    }
+    public static func safeDeclaredCodecs(_ value: String) -> String? {
+        let components=value.lowercased().split(separator:",").map { $0.trimmingCharacters(in:.whitespaces) }
+        guard !components.isEmpty,components.count<=8,components.allSatisfy({ c in
+            !c.isEmpty && c.utf8.count<=64 && ["avc1","avc3","hvc1","hev1","mp4a","ac-3","ec-3"].contains(String(c.split(separator:".").first ?? "")) && c.utf8.allSatisfy { (97...122).contains($0) || (48...57).contains($0) || $0==46 || $0==45 }
+        }) else { return nil }
+        return components.joined(separator:", ")
     }
 }
 

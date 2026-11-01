@@ -134,8 +134,8 @@ def main():
             results.append({'scenario': name, 'status': result['status'], 'failureCode': result.get('failureCode'),
                             'passedChecks': len(result.get('checks', [])), 'evidence': str(output/(name+'.json'))})
             save(); print(json.dumps(results[-1]), flush=True)
-            if name == 'diagnostics' or result['status'] != 'passed':
-                capture='diagnostics.png' if name == 'diagnostics' else name+'-failure.png'
+            if name in ['diagnostics', 'controls-quality'] or result['status'] != 'passed':
+                capture=name+'.png' if result['status'] == 'passed' else name+'-failure.png'
                 simctl('io', udid, 'screenshot', str(output/capture), check=False)
             simctl('terminate', udid, BUNDLE, check=False)
             if result['status'] != 'passed': break

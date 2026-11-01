@@ -1,5 +1,9 @@
 # Webpage loading investigation — 25 October 2026
 
+## Current automatic-VR interaction (0.16.1)
+
+Return to page, Open website controls and system dismissal pause automatic VR for that tab’s current page. Website Play/settings actions then stay inline. Manual Watch in VR remains available; Video tools → Resume automatic VR on this page restores automatic entry when the global preference is enabled. Navigation or reload clears the page hold. The global Open videos in VR preference remains unchanged; turn it off to keep website playback inline across navigation/reloads. Controlled mounted-scene tests on both runtimes check new website play signals remain inline after returning and manual VR re-entry still works. This interaction does not change WebKit’s media permission policy or claim a website loading fix.
+
 ## Live observation
 
 The user supplied a 0.3.3 report from visionOS 27 with a website-player loading symbol, page HTTP 200, no native attempt, and four detected source entries. Every entry had MediaError code 0, networkState 0 (NETWORK_EMPTY), readyState 0 (HAVE_NOTHING), paused true and zero dimensions. The site name was not supplied. The entries may include multiple sources for one element; they are not necessarily four visible players.

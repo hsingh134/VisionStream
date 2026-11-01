@@ -30,6 +30,19 @@ import SwiftUI
                 }
             }
             if let error = app.extractor.errorMessage { Text(error).foregroundStyle(.orange) }
+            if let best=ExtractedMedia.highestReported(in:app.extractor.streams) {
+                HStack {
+                    VStack(alignment:.leading,spacing:3) {
+                        Text("Highest reported resolution").font(.headline)
+                        Text(best.label).font(.callout).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Try highest resolution",systemImage:"play.fill") { watch(best.candidate) }
+                        .disabled(app.playback.openingImmersive || app.playback.immersiveActive)
+                }
+                Text("Sizes are width × height; ‘p’ gives the picture height. Sources are ranked by reported height. Native playback still needs to be checked.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     ForEach(app.extractor.streams) { stream in

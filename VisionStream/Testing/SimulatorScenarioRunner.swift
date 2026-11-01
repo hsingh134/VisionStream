@@ -570,12 +570,19 @@ import Darwin
         try require(!app.playback.immersiveActive && !app.playback.isPreparing && !app.playback.openingImmersive,"return-does-not-reopen-same-gesture")
         record("return-and-replayed-gesture-do-not-reopen-viewer",app:app)
         try await signal(UUID().uuidString)
+        try await Task.sleep(for:.milliseconds(1500))
+        try require(app.browser.automaticVRPausedForPage && app.browser.preferences.openVideosInVR && !app.playback.immersiveActive && !app.playback.isPreparing,"website-play-does-not-reopen-vr-after-return")
+        try require(app.browser.candidates.contains { $0.width>0 && $0.webMedia?.paused==false },"website-video-plays-inline-for-settings")
+        record("website-controls-stay-inline-after-a-new-play-gesture",app:app)
+        guard let manual=MediaCandidate.preferredForPlayback(in:app.browser.candidates) else { throw Failure.check("manual-return-no-candidate") }
+        watchAction?(manual)
         try await wait("automatic-second-user-play",seconds:45) { app.playback.immersiveActive && app.playback.isPlaying && returnAction != nil }
-        record("new-play-gesture-opens-again",app:app)
+        record("manual-watch-in-vr-still-opens-from-website-mode",app:app)
         if let exit=returnAction { await exit() }
         try await wait("automatic-second-return",seconds:20) { !app.playback.immersiveActive && SimulatorTestMonitor.browserScenePhase=="active" }
         app.browser.open(config.origin.appendingPathComponent("empty-test"))
         try await wait("automatic-empty-navigation") { app.browser.pageHTTPStatus==200 && !app.browser.isLoading && app.browser.candidates.isEmpty && !mounted(.videoBar) }
+        try require(!app.browser.automaticVRPausedForPage && app.browser.preferences.openVideosInVR,"new-page-restores-automatic-mode")
         try require(app.downloads.videos.isEmpty && app.queuedSaves.isEmpty && !app.saveInProgress,"automatic-play-does-not-download")
         record("leaving-video-hides-bar-and-no-download-was-started",app:app)
     }

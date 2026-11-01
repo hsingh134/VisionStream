@@ -81,5 +81,9 @@ final class VideoImageQualityTests: XCTestCase {
         XCTAssertNil(VideoCodecPrecision.hevc(configuration:Data(repeating:0,count:22)))
         XCTAssertNil(VideoPipelineSnapshot().source.bitsPerComponent)
         XCTAssertEqual(VideoPipelineSnapshot.safeTag("https://private.example/secret"),"unrecognised")
+        XCTAssertEqual(VideoPipelineSnapshot.safeDeclaredCodecs("AVC1.640028, mp4a.40.2"),"avc1.640028, mp4a.40.2")
+        XCTAssertNil(VideoPipelineSnapshot.safeDeclaredCodecs("avc1.640028, https://private.example/secret"))
+        XCTAssertNil(VideoPipelineSnapshot.safeDeclaredCodecs("secret-token"))
+        XCTAssertNil(VideoPipelineSnapshot.safeDeclaredCodecs(String(repeating:"a",count:512)))
     }
 }

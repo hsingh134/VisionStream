@@ -220,6 +220,14 @@ import SwiftUI
                 }.buttonStyle(.plain)
             }
             Text(app.playback.qualityStatus).font(.caption).foregroundStyle(.secondary)
+            Text("Highest selects within this source’s playlist. The website or Find streams may offer other sources at higher resolutions.")
+                .font(.caption).foregroundStyle(.secondary)
+            if immersive && !app.playback.isOffline {
+                Button("Open website controls",systemImage:"safari") { Task { await returnToPage() } }
+                    .disabled(returningToPage)
+                Text("Return to the page to change the website’s video quality. Playback stays on that page until you choose Watch in VR or resume automatic VR.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
     }
     private func selectQuality(_ value: PlaybackQuality) { showQuality = false; app.playback.changeQuality(value) }
@@ -258,6 +266,7 @@ import SwiftUI
         guard !returningToPage else { return }
         returningToPage = true; returnError = nil
         defer { returningToPage = false }
+        app.browser.useWebsiteControls()
         app.playback.cancelScheduledRecenter()
         openWindow(id: "browser")
         // Never ask visionOS to dismiss the last scene before its replacement

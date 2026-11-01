@@ -8,6 +8,7 @@ final class BrowserModel: NSObject, Identifiable, WKNavigationDelegate, WKUIDele
     private(set) var pageTitle = "New tab"
     private(set) var isStartPage = true
     private(set) var isActiveTab = true
+    private(set) var automaticVRPausedForPage = false
     private let restoreOnStart: Bool
     @ObservationIgnored weak var diagnostics: SessionDiagnostics?
     private(set) var diagnosticContext: DiagnosticContext?
@@ -49,6 +50,15 @@ final class BrowserModel: NSObject, Identifiable, WKNavigationDelegate, WKUIDele
     }
 
     func invalidateCookieSnapshot() { cookieSnapshot.clear() }
+    func useWebsiteControls() {
+        guard !automaticVRPausedForPage else { return }
+        automaticVRPausedForPage=true
+        diagnostics?.record(.controls,context:diagnosticContext,labels:["action":"website-controls-for-page"])
+    }
+    func resumeAutomaticVRForPage() {
+        automaticVRPausedForPage=false
+        diagnostics?.record(.controls,context:diagnosticContext,labels:["action":"resume-automatic-vr-for-page"])
+    }
     func resetForWebsiteDataClear() { cookieSnapshot.clear(); webView.stopLoading(); showStartPage() }
 
     func setTabActive(_ active: Bool) {
@@ -263,7 +273,7 @@ final class BrowserModel: NSObject, Identifiable, WKNavigationDelegate, WKUIDele
             }
             return document(URL(string:media.pageURL)) == document(webView.url)
         }
-        if let media=automaticPlayback.next(in:eligible,navigation:navigationVersion,pageAge:Date().timeIntervalSince(navigationStartedAt),enabled:isActiveTab && preferences.openVideosInVR) {
+        if let media=automaticPlayback.next(in:eligible,navigation:navigationVersion,pageAge:Date().timeIntervalSince(navigationStartedAt),enabled:isActiveTab && preferences.openVideosInVR && !automaticVRPausedForPage) {
             diagnostics?.record(.controls,context:diagnosticContext,labels:["action":"webpage-play-native-handoff"])
             onUserPlayback?(media)
         }
@@ -278,6 +288,7 @@ final class BrowserModel: NSObject, Identifiable, WKNavigationDelegate, WKUIDele
         // departing page cannot supply media again until the new document commits.
         hasStartedBrowsing = true; isLoading = true; acceptsMediaReports = false
         navigationVersion += 1
+        automaticVRPausedForPage=false
         navigationStartedAt=Date()
         pageHTTPStatus = nil; pageFailureCodes = []
         finishDialog(nil)

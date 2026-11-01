@@ -61,6 +61,19 @@ import WebKit
         restored.removeBookmark(second)
         XCTAssertFalse(BrowserPreferences(defaults: defaults).favouriteIDs.contains(second.id))
     }
+    func testWebsiteControlsHoldIsPerTabAndClearsOnNavigation() throws {
+        let (preferences,defaults,name)=try preferences()
+        defer { defaults.removePersistentDomain(forName:name) }
+        let tabs=BrowserTabs(preferences:preferences),first=tabs.active
+        defer { tabs.pages.forEach { $0.closeTab() } }
+        first.useWebsiteControls();XCTAssertTrue(first.automaticVRPausedForPage)
+        XCTAssertTrue(preferences.openVideosInVR,"Returning to the page must not change the global preference")
+        let second=try XCTUnwrap(tabs.add());XCTAssertFalse(second.automaticVRPausedForPage)
+        tabs.select(first.id);XCTAssertTrue(first.automaticVRPausedForPage)
+        first.resumeAutomaticVRForPage();XCTAssertFalse(first.automaticVRPausedForPage)
+        first.useWebsiteControls();first.showStartPage()
+        XCTAssertFalse(first.automaticVRPausedForPage)
+    }
     func testTabsKeepIndependentBackStacksAndNewTabsDoNotRestoreOldWebsite() async throws {
         let (preferences, defaults, name) = try preferences(), base = try origin()
         defer { defaults.removePersistentDomain(forName: name) }

@@ -200,6 +200,7 @@ final class PlaybackModel {
         defer { timeout.cancel() }
         do {
             var selectedURL = url
+            var selectedDeclaration:HLSManifest.Variant?
             if url.isFileURL { qualityStatus = "Saved video" }
             var selectedCookies = cookies
             if !url.isFileURL, quality == .highest, candidate.normalizedMIMEType.contains("mpegurl") || url.pathExtension.lowercased() == "m3u8" {
@@ -238,6 +239,7 @@ final class PlaybackModel {
                     let browserCookies = await cookieProvider?(best.url) ?? cookies
                     guard generation == token, !Task.isCancelled else { return false }
                     selectedURL = best.url; selectedWidth = best.width; selectedHeight = best.height
+                    selectedDeclaration = best
                     let issued = probe.cookies(for: best.url)
                     selectedCookies = CookieScope.matching(browserCookies, url: best.url).filter { old in
                         !issued.contains { $0.name == old.name && $0.domain == old.domain && $0.path == old.path }
@@ -347,10 +349,24 @@ final class PlaybackModel {
             isPreparing = false
             isReady = true
             diagnosticStage = "player-ready"
+            let declaration=selectedDeclaration
             sourceInspection = Task { @MainActor [weak self] in
-                let source = await VideoPipelineInspection.source(asset)
-                guard !Task.isCancelled, let self, self.generation == token else { return }
-                self.videoPipeline.source = source
+                // HLS tracks may appear only after playback starts. Retry a
+                // bounded number of times, without delaying preparation or
+                // treating manifest declarations as decoded track measurements.
+                for delay in [0,1,3] {
+                    if delay>0 { do { try await Task.sleep(for:.seconds(delay)) } catch { return } }
+                    guard !Task.isCancelled, let self, self.generation == token else { return }
+                    var source = await VideoPipelineInspection.source(asset,item:item)
+                    guard !Task.isCancelled, self.generation == token else { return }
+                    if let declaration {
+                        source.declaredHLSCodecs=VideoPipelineSnapshot.safeDeclaredCodecs(declaration.codecs)
+                        source.declaredHLSWidth=declaration.width;source.declaredHLSHeight=declaration.height
+                        source.declaredHLSBitrate=declaration.bandwidth>0 ? declaration.bandwidth:nil
+                    }
+                    self.videoPipeline.source = source
+                    if source.codec != nil { return }
+                }
             }
             startTicker()
             if automaticallyDetectFormat, !selectedURL.isFileURL, !nativeProjectionIdentified, candidate.normalizedMIMEType == "video/mp4" || ["mp4", "m4v"].contains(selectedURL.pathExtension.lowercased()) {
@@ -570,13 +586,15 @@ final class PlaybackModel {
             lastPipelineLog=now;lastPipelineConfiguration=configuration
             var numbers:[String:Double] = ["decodedWidth":Double(frame.width),"decodedHeight":Double(frame.height),"eyeWidth":Double(render.plan.sourceEyeWidth),"eyeHeight":Double(render.plan.sourceEyeHeight),"textureWidth":Double(render.plan.width),"textureHeight":Double(render.plan.height),"textureCount":Double(render.plan.textureCount),"textureBytes":Double(render.plan.descriptorBytes),"mipLevels":Double(render.plan.mipLevels),"renderScale":render.plan.scale,"rendererCompletedFrames":Double(performance.completedFrames),"rendererSkippedPolls":Double(performance.backpressureSkips)]
             numbers["sourceFrameRate"]=videoPipeline.source.nominalFrameRate
-            numbers["sourceBitDepth"]=videoPipeline.source.bitsPerComponent.map(Double.init)
+            numbers["sourceBitDepth"]=videoPipeline.source.bitsPerComponent.map { Double($0) }
             numbers["sourceEstimatedBitrate"]=videoPipeline.source.estimatedBitrate
             numbers["gpuPreparationMs"]=performance.meanGPUPreparationMs
             numbers["cpuPreparationWallMs"]=performance.lastCPUPreparationWallMs
             numbers["processCPUpct"]=performance.processCPUPercentOfOneCore
-            numbers["processFootprint"]=performance.processFootprintBytes.map(Double.init)
-            numbers["metalBytes"]=performance.metalDeviceAllocatedBytes.map(Double.init)
+            // A function reference to Double.init can select init(bitPattern:)
+            // for UInt64. Explicit numeric conversion preserves byte counts.
+            numbers["processFootprint"]=performance.processFootprintBytes.map { Double($0) }
+            numbers["metalBytes"]=performance.metalDeviceAllocatedBytes.map { Double($0) }
             diagnostics?.record(.playerMetrics,context:diagnosticContext,labels:["phase":"video-pipeline-sample","mode":render.mode.rawValue,"projection":render.projection.rawValue,"packing":render.layout.rawValue,"codec":videoPipeline.source.codec ?? "unknown","colorPrimaries":frame.colorPrimaries ?? "unknown","transferFunction":frame.transferFunction ?? "unknown","sourceTransferFunction":videoPipeline.source.transferFunction ?? "unknown","sampling":render.mode == .maximum ? "linear-mips-anisotropy8":"linear"],numbers:numbers)
         }
     }

@@ -37,18 +37,7 @@ import WebKit
             streams.append(.init(candidate: candidate, unavailableCode: unavailable,
                                  advisoryCode: stream.advisoryCode, isAdaptive: stream.isAdaptive))
         }
-        // Stable ordering keeps existing format groups and advisories. Unknown
-        // dimensions cannot outrank a measured complete source in the same group.
-        let ranked = streams.enumerated().sorted { left, right in
-            func key(_ stream: ExtractedStream) -> (Int, Int, Int64) {
-                (stream.unavailableReason == nil ? 0 : 1,
-                 stream.candidate.normalizedMIMEType == "video/mp4" ? 0 : (stream.isAdaptive ? 1 : 2),
-                 -Int64(stream.candidate.width) * Int64(stream.candidate.height))
-            }
-            let a = key(left.element), b = key(right.element)
-            return a == b ? left.offset < right.offset : a < b
-        }.map(\.element)
-        return .init(streams: ranked)
+        return .init(streams: ExtractedMedia.ranked(streams))
     }
     private static var cachedAgent: String?
     /// The app uses the default platform WebKit identity. Read it from an

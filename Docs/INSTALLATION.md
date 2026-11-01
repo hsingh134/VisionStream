@@ -1,5 +1,12 @@
 # Installation and signing
 
+## Website controls and higher-quality sources (0.16.1)
+
+From native playback choose **Return to page**, or **Streaming quality → Open website controls**. Automatic VR is paused for that page so the website’s Play/quality controls stay usable. Choose **Watch in VR** to return manually, **Video tools → Resume automatic VR on this page**, or navigate to another page. The global Browser setting is unchanged. Turn **Open videos in VR when I press Play** off in Browser settings if you want browser playback throughout the session, including after navigation/reload.
+
+**Find streams** now orders available options by reported height and offers **Try highest resolution**. A source labelled 1440p has more vertical pixels than 2160 × 1080 (1080p), even if its width is not reported. Native playback still needs checking; the player header gives the actual decoded size. Highest in the native quality panel selects within the chosen playlist, not every source on a website.
+
+
 ## Picture quality (0.16.0)
 
 Version 0.16.0 (39) adds **Picture → Original / Enhanced / Maximum Quality**, **A/B** and an optional **Pipeline diagnostics** overlay. Original is the default. Pause before A/B to compare the same source frame and viewpoint. Maximum adds filtering cost; use Original if hardware cannot sustain smooth motion. Picture modes do not select a higher streaming rendition. See [the audit and physical checklist](../VIDEO_QUALITY_AUDIT.md) and [measurements](../VIDEO_QUALITY_BENCHMARKS.md). Source precision, HDR display appearance, final compositor resolution and headset thermals are distinct; only the accessible pipeline stages are measured.
