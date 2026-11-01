@@ -5,3 +5,7 @@
 ENABLE_TESTABILITY = NO
 DEBUG_INFORMATION_FORMAT = dwarf-with-dsym
 VALIDATE_PRODUCT = YES
+
+// Personal testing overrides must never enable full diagnostics by default in a distribution build.
+VISIONSTREAM_TESTING_DIAGNOSTICS_DEFAULT = NO
+VISIONSTREAM_TESTING_DIAGNOSTICS_DEFAULT[sdk=xros*] = NO

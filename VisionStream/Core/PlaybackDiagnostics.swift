@@ -61,8 +61,11 @@ public enum PlaybackDiagnostics {
         return result
     }
 
-    public static func failureHint(_ error: Error?) -> String? {
+    public static func failureHint(_ error: Error?, inspectionHTTPStatus: Int? = nil) -> String? {
         let codes = failure(error)
+        if inspectionHTTPStatus == 412 {
+            return "VisionStream’s playlist check received HTTP 412 (Precondition Failed), and native playback could not open this stream. The server’s required request conditions are not yet known. Website playback may still work."
+        }
         if codes.contains("HTTP:404") {
             return "The native media service reported HTTP 404: a required playlist or media resource was not found for its request. Streaming and saving can make different requests. Refresh the webpage for a fresh source; this message does not identify which resource failed."
         }

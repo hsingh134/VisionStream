@@ -17,7 +17,7 @@ import Darwin
             return from(ProcessInfo.processInfo.environment)
         }
         static func from(_ env: [String: String]) -> Self? {
-            let names: Set<String> = ["controls-hide", "tabs", "auto-play", "soak", "saved-state", "downloads", "forms", "quality", "quality4k", "controls", "controls-format", "controls-quality", "mp4", "hls", "library", "library-hls", "cancel", "unsupported", "finder", "reentry", "interrupted"]
+            let names: Set<String> = ["diagnostics", "controls-hide", "tabs", "auto-play", "soak", "saved-state", "downloads", "forms", "quality", "quality4k", "controls", "controls-format", "controls-quality", "mp4", "hls", "library", "library-hls", "cancel", "unsupported", "finder", "reentry", "interrupted"]
             guard let name = env["VISIONSTREAM_SCENE_TEST"], names.contains(name),
                   let raw = env["VISIONSTREAM_TEST_ORIGIN"], let url = URL(string: raw),
                   url.scheme == "https", ["127.0.0.1", "localhost"].contains(url.host ?? ""),
@@ -80,6 +80,9 @@ import Darwin
     private static var openDetails: (() -> Void)?
     private static var closeSheets: (() -> Void)?
     private static var cancelAction: (() -> Void)?
+    static var diagnosticCheck: (() async -> Void)?
+    static var refreshTestingReport: (() -> Void)?
+    static var diagnosticPreviewSize: (() -> Int)?
     private static var started = false
     private static var checks: [[String: Any]] = []
     private static var configuration: Configuration?
@@ -101,6 +104,9 @@ import Darwin
         guard !started else { return }
         started = true; configuration = config; startedAt = Date()
         Task { @MainActor in
+            // Each ordinary scene tests the redacted profile regardless of a prior
+            // explicit diagnostics scene's persisted opt-in on this lab device.
+            if config.name != "diagnostics" { app.setTestingDiagnosticsEnabled(false) }
             app.setDiagnosticsEnabled(true) // Explicit local test opt-in; fresh customer installs stay off.
             app.playback.player.isMuted = true
             write(status: "running", app: app)
@@ -117,10 +123,44 @@ import Darwin
         }
     }
 
+    private static func diagnosticChecks(_ config: Configuration,app:AppModel) async throws {
+        app.setTestingDiagnosticsEnabled(true)
+        openAddress?();try await wait("diagnostic-address-mounted") { mounted(.address) }
+        submitAddress?(config.origin.appendingPathComponent("web-hls-playback-test").absoluteString)
+        try await wait("diagnostic-page-loaded",seconds:45) { !mounted(.address) && app.browser.pageHTTPStatus==200 && !app.browser.isLoading && !app.browser.candidates.isEmpty }
+        _ = try await app.browser.webView.callAsyncJavaScript("const v=document.querySelector('video');v.loop=true;await v.play();return true",in:nil,contentWorld:.page)
+        openDetails?();try await wait("diagnostic-details-mounted") { mounted(.details) && diagnosticCheck != nil }
+        record("diagnostic-details-mounted",app:app)
+        await diagnosticCheck?()
+        try require(!app.testingChecksRunning && app.testingChecksMessage?.contains("complete") == true,"diagnostic-check-action-completed")
+        record("diagnostic-check-action-completed",app:app)
+        let report=app.playbackReport
+        try require(report.contains("web-hls-playback-test") && report.contains("paused-native-check-completed") && report.contains("ready-without-playback"),"diagnostic-links-and-paused-probe")
+        record("diagnostic-links-and-paused-probe",app:app)
+        let fullFiles=try FileManager.default.contentsOfDirectory(at:DiagnosticReportFiles.root,includingPropertiesForKeys:nil).filter { $0.pathExtension=="json" }
+        let fullData=try fullFiles.first.map { try Data(contentsOf:$0) } ?? Data()
+        let complete=try JSONSerialization.jsonObject(with:fullData) as? [String:Any]
+        try require((diagnosticPreviewSize?() ?? Int.max)<12_500 && fullData.count>12_500 && complete?["sessionHistory"] != nil && complete?["testingDetailsEnabled"] as? Bool == true,"diagnostic-bounded-preview-and-complete-export")
+        record("diagnostic-bounded-preview-and-complete-export",app:app)
+        let playing=try await app.browser.webView.evaluateJavaScript("!document.querySelector('video').paused") as? Bool
+        try require(playing==true && !app.playback.immersiveActive && !app.playback.isReady,"diagnostic-keeps-webpage-playing")
+        record("diagnostic-keeps-webpage-playing",app:app)
+        app.setTestingDiagnosticsEnabled(false);refreshTestingReport?()
+        let files=try FileManager.default.contentsOfDirectory(at:DiagnosticReportFiles.root,includingPropertiesForKeys:nil).filter { $0.pathExtension=="json" }
+        let redacted=try files.first.map { try String(contentsOf:$0,encoding:.utf8) } ?? ""
+        try require(files.count==1 && !redacted.contains(config.origin.absoluteString),"diagnostic-redacted-export-replaces-full-copy")
+        record("diagnostic-redacted-export-replaces-full-copy",app:app)
+        app.setTestingDiagnosticsEnabled(true);refreshTestingReport?()
+        try require(mounted(.details),"diagnostic-report-remains-visible")
+        record("diagnostic-report-remains-visible",app:app)
+        try await Task.sleep(for:.milliseconds(300))
+    }
+
     private static func run(_ config: Configuration, app: AppModel) async throws {
         try await wait("browser-mounted") { mounted(.browser) && app.browser.webView.window != nil }
         if config.name == "tabs" { try await browserTabs(config, app: app); return }
         if config.name == "forms" { try await forms(config, app: app); return }
+        if config.name == "diagnostics" { try await diagnosticChecks(config,app:app);return }
         if config.name == "auto-play" { try await automaticPlayback(config,app:app);return }
         let path = ["quality4k", "soak"].contains(config.name) ? "quality-4k.html" : (["quality", "quality4k", "soak"].contains(config.name) || config.name.hasPrefix("controls")) ? "quality.html" : ["mp4", "reentry", "interrupted"].contains(config.name) ? "automation-mp4" : (config.name == "hls" ? "automation-hls" : "empty-test")
         // Submit through the actual address form action rather than restoring a
@@ -547,6 +587,13 @@ import Darwin
         record("address-form-navigation", app: app)
         for (panel, action) in [(SimulatorPanel.finder, openFinder), (.library, openLibrary), (.details, openDetails), (.downloads, openDownloads), (.bookmarks, openBookmarks), (.settings, openSettings)] {
             action?(); try await wait("sheet-" + panel.rawValue) { mounted(panel) }
+            if panel == .details {
+                // onAppear precedes the sheet's first export/task completion.
+                // Wait until its shared actions are installed, then allow the
+                // presentation transition to settle before dismissing it.
+                try await wait("details-actions-ready") { diagnosticCheck != nil && refreshTestingReport != nil }
+                try await Task.sleep(for:.milliseconds(400))
+            }
             record("mounted-" + panel.rawValue, app: app)
             if config.reviewPanel == panel.rawValue {
                 if panel == .downloads {

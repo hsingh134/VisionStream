@@ -150,6 +150,8 @@ import Foundation
         let privacy = PrivacyControlTests()
         let snapshots = BrowserCookieSnapshotTests()
         let asyncTests: [(String, () async throws -> Void)] = [
+            ("testing full links and credential boundaries",session.testTestingModeIncludesSignedLinksAndSelectedHeadersButNeverCredentialValues),
+            ("testing URL validation",{ session.testTestingLinkValidationPreservesQueryEncodingAndRejectsLocalFiles() }),
             ("browser cookie scope and expiry",snapshots.testFreshCookiesAreNormallyScopedAndExpiredCookiesAreExcluded),
             ("browser cookie timeout and late reply",snapshots.testTimeoutUsesPreviousSnapshotAndLateReplyCanRefreshWithoutDoubleCompletion),
             ("browser cookie clearing epoch",snapshots.testClearReleasesWaitingReadAndRejectsRepliesFromBeforeLogout),

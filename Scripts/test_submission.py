@@ -25,7 +25,9 @@ class SubmissionTests(unittest.TestCase):
             meta=json.loads((out/'metadata.json').read_text())
             self.assertLessEqual(len(meta['subtitle']),30);self.assertLessEqual(len(meta['keywords']),100)
             policy=(out/'site/privacy.html').read_text()
-            self.assertIn('A &amp; B &lt;Studio&gt;',policy);self.assertIn('Updated 26 October 2026',policy)
+            self.assertIn('A &amp; B &lt;Studio&gt;',policy);self.assertIn('Updated 1 November 2026',policy)
+            self.assertIn('Optional testing diagnostics with full links',policy)
+            self.assertNotIn('Updated 26 October 2026',policy)
             self.assertIn('appleTeamID',meta['ownerFieldsPending'])
             media=out/'site/review-media'
             if media.exists():

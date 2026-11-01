@@ -192,7 +192,7 @@ final class PlaybackModel {
                 var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
                 for (key, value) in HTTPCookie.requestHeaderFields(with: CookieScope.matching(cookies, url: url)) { request.setValue(value, forHTTPHeaderField: key) }
                 if let userAgent, userAgent.utf8.count <= 1024, userAgent.rangeOfCharacter(from: .controlCharacters) == nil { request.setValue(userAgent, forHTTPHeaderField: "User-Agent") }
-                let probe = HLSQualityRequest(); qualityRequest = probe
+                let probe = HLSQualityRequest(diagnosticObserver: diagnostics?.testingObserver(context: diagnosticContext, phase: "quality-inspection")); qualityRequest = probe
                 let data: Data?
                 var inspectionCodes: [String] = []
                 do { data=try await probe.load(request) }
@@ -359,7 +359,7 @@ final class PlaybackModel {
                 // The outer preparation deadline remains active, bounding both attempts.
                 return await load(candidate, url: url, cookies: refreshed, userAgent: userAgent, token: token, attempt: 1)
             }
-            fail(PlaybackDiagnostics.failureHint(error) ?? "The stream could not be opened. Check the connection and website access. Signed links, required headers, and unsupported codecs can prevent native playback.", reason: rejectedByPlayer ? .playerRejected : .assetLoadFailed)
+            fail(PlaybackDiagnostics.failureHint(error, inspectionHTTPStatus: manifestInspection?.httpStatus) ?? "The stream could not be opened. Check the connection and website access. Signed links, required headers, and unsupported codecs can prevent native playback.", reason: rejectedByPlayer ? .playerRejected : .assetLoadFailed)
             return false
         }
     }
@@ -628,6 +628,7 @@ final class PlaybackModel {
     }
 
     private func recordFailure(_ error: Error?, item: AVPlayerItem?) {
+        NativeDiagnosticMetrics.recordFailureResources(error,item:item,history:diagnostics,context:diagnosticContext)
         failureCodes = PlaybackDiagnostics.failure(error)
         switch item?.status {
         case .unknown: itemStatusAtFailure = .unknown

@@ -90,6 +90,23 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(302); self.send_header('Location', f'https://localhost:{self.server.server_port}/dimensions-high.mp4?fixture=published%2Buri'); self.send_header('Content-Length', '0'); self.end_headers(); return
         if path == '/dimensions-low.mp4': path = '/vr180-mono.mp4'
         if path == '/dimensions-high.mp4': path = '/vr360-sbs.mp4'
+        if path == '/testing-early-error':
+            body = b'<!doctype html><head><script>throw new TypeError("PRIVATE_ERROR_MESSAGE_NOT_CAPTURED");</script></head><body><video muted playsinline controls src="/vr180-sbs.mp4"></video></body>'
+            self.send_response(200);self.send_header('Content-Type','text/html');self.send_header('Content-Length',str(len(body)));self.end_headers()
+            if not head:self.wfile.write(body)
+            return
+        if path == '/testing-diagnostic/master.m3u8':
+            body = b'Precondition failed'
+            self.send_response(412)
+            self.send_header('Content-Type', 'text/plain')
+            self.send_header('Content-Length', str(len(body)))
+            self.send_header('ETag', 'TEST_DIAGNOSTIC_ETAG')
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('Set-Cookie', 'ticket=PRIVATE_DIAGNOSTIC_COOKIE; Path=/; Secure; HttpOnly')
+            self.send_header('X-Secret', 'PRIVATE_DIAGNOSTIC_HEADER')
+            self.end_headers()
+            if not head: self.wfile.write(body)
+            return
         if path == '/download-invalid-mp4.mp4':
             body = b'<html>Fixture error response, not a video</html>'
             self.send_response(200); self.send_header('Content-Type', 'video/mp4'); self.send_header('Content-Length', str(len(body))); self.end_headers()

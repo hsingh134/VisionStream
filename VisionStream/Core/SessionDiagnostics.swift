@@ -29,7 +29,7 @@ public struct DiagnosticResource: Codable, Hashable, Sendable {
 }
 
 public struct DiagnosticContext: Codable, Hashable, Sendable {
-    public enum Operation: String, Codable, Hashable, Sendable { case navigation, playback, hlsDownload, mp4Download, extraction, fileImport, library }
+    public enum Operation: String, Codable, Hashable, Sendable { case navigation, playback, diagnosticCheck, hlsDownload, mp4Download, extraction, fileImport, library }
     public let sessionID: UUID
     public let attemptID: UUID
     public var pageID: UUID?
@@ -43,7 +43,7 @@ public struct DiagnosticContext: Codable, Hashable, Sendable {
 
 public struct DiagnosticEvent: Codable, Sendable {
     public enum Kind: String, Codable, Sendable {
-        case sessionStarted, lifecycle, attemptStarted, navigation, mediaState, extraction,
+        case sessionStarted, lifecycle, attemptStarted, navigation, mediaState, extraction, testingResource, testingCheck,
              playback, quality, format, controls, buffering, decodedFrame, playerMetrics,
              playerError, transfer, transferMetrics, restoredDownload, reportCreated
     }
@@ -55,6 +55,7 @@ public struct DiagnosticEvent: Codable, Sendable {
     public var labels: [String: String]
     public var numbers: [String: Double]
     public var codes: [String]
+    public var testing: TestingDiagnosticDetails?
 }
 
 /// Local append-only session events. URL identities use an ephemeral random HMAC
@@ -67,6 +68,8 @@ public struct DiagnosticEvent: Codable, Sendable {
     public private(set) var persistedEventCount = 0
     public private(set) var storageFailureCodes: [String] = []
     public private(set) var isEnabled:Bool
+    public private(set) var isTestingEnabled = false
+    private var testingLinks: [UUID:String] = [:]
     private var key = SymmetricKey(size: .bits256)
     private let start = ProcessInfo.processInfo.systemUptime
     private let clock: () -> Date
@@ -81,7 +84,7 @@ public struct DiagnosticEvent: Codable, Sendable {
     private var deduplicated: [String: Data] = [:]
     private var file: URL { root.appendingPathComponent(sessionID.uuidString + ".jsonl") }
     private static let labelKeys: Set<String> = ["phase","status","reason","action","projection","layout","evidence","quality","mode","mimeType","scheme","extension","method","protocol","appVersion","build","runtime","platform","itemStatus","decision","packing","waitingReason","sourceKind","failureReason","codec","audioCodec","contentEncoding","resourceRole","requestMode"]
-    private static let numberKeys: Set<String> = ["width","height","selectedWidth","selectedHeight","decodedWidth","decodedHeight","elapsed","duration","seekStart","seekEnd","target","rate","progress","receivedBytes","expectedBytes","savedBytes","cookieCount","userAgentApplied","backgroundUserAgentApplied","automaticFormat","swapEyes","flipY","protected","playable","paused","readyState","networkState","errorCode","frameMain","httpStatus","statusCode","durationMs","redirectCount","stalls","observedBitrate","indicatedBitrate","transferDuration","mediaRequests","segmentsDuration","bytesTransferred","freeStorageBytes","variantCount","candidateCount","formatVotes","imageMatch","taskIdentifier","loadedSeconds","expectedSeconds","recordCount","errorCount","requestCount","cached","recovered","tlsVersion","videoRange","responseBytes","requestedRangeBytes","bufferEmpty","likelyToKeepUp","rangeSupported","rangeStart","rangeEnd","resourceBytes","resourceIndex","resourceCount","inspectedResources","sbsScore","tbScore","sbsRegions","tbRegions","expandedSearch","requestContextAvailable"]
+    private static let numberKeys: Set<String> = ["width","height","selectedWidth","selectedHeight","decodedWidth","decodedHeight","elapsed","duration","seekStart","seekEnd","target","rate","progress","receivedBytes","expectedBytes","savedBytes","cookieCount","userAgentApplied","backgroundUserAgentApplied","automaticFormat","swapEyes","flipY","protected","playable","paused","readyState","networkState","errorCode","frameMain","httpStatus","statusCode","durationMs","redirectCount","stalls","observedBitrate","indicatedBitrate","transferDuration","mediaRequests","segmentsDuration","bytesTransferred","freeStorageBytes","variantCount","candidateCount","formatVotes","imageMatch","taskIdentifier","loadedSeconds","expectedSeconds","recordCount","errorCount","requestCount","cached","recovered","tlsVersion","videoRange","responseBytes","requestedRangeBytes","bufferEmpty","likelyToKeepUp","rangeSupported","rangeStart","rangeEnd","resourceBytes","resourceIndex","resourceCount","inspectedResources","sbsScore","tbScore","sbsRegions","tbRegions","expandedSearch","requestContextAvailable","pageLoading","navigationVersion","tabActive"]
 
     public init(root: URL? = nil, maximumSessionBytes: Int = 32 * 1024 * 1024, maximumRetainedBytes: Int = 96 * 1024 * 1024, maximumSessions: Int = 7, enabled:Bool = true, clock: @escaping () -> Date = Date.init) {
         self.root = (root ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("SessionDiagnostics")).resolvingSymlinksInPath()
@@ -128,14 +131,36 @@ public struct DiagnosticEvent: Codable, Sendable {
         sessionID=UUID();key=SymmetricKey(size:.bits256)
         eventCount=0;persistedEventCount=0;fileBytes=0;wroteGapMarker=false
         recent.removeAll();unsaved.removeAll();lastAttempts.removeAll();deduplicated.removeAll();storageFailureCodes=[]
+        isTestingEnabled=false; testingLinks.removeAll()
         if let failure { throw failure }
+    }
+
+    public func setTestingEnabled(_ enabled: Bool) {
+        guard enabled != isTestingEnabled else { return }
+        isTestingEnabled = enabled
+        if enabled { setEnabled(true) }
+        record(.lifecycle, labels: ["phase": enabled ? "testing-details-enabled" : "testing-details-disabled"])
+    }
+    public func testingObserver(context: DiagnosticContext?, phase: String) -> (@Sendable (TestingDiagnosticDetails) -> Void)? {
+        guard isEnabled, isTestingEnabled else { return nil }
+        return { [weak self] details in
+            Task { @MainActor in
+                self?.record(.testingCheck,context:context,labels:["phase":phase],testing:details)
+            }
+        }
     }
 
     public func reference(_ value: String, page: Bool = false) -> UUID {
         var identity = value
         if page, var components = URLComponents(string: value) { components.fragment = nil; identity = components.string ?? value }
         let digest = Array(HMAC<SHA256>.authenticationCode(for: Data(((page ? "page:" : "media:") + identity).utf8), using: key).prefix(16))
-        return UUID(uuid: (digest[0],digest[1],digest[2],digest[3],digest[4],digest[5],digest[6],digest[7],digest[8],digest[9],digest[10],digest[11],digest[12],digest[13],digest[14],digest[15]))
+        let id = UUID(uuid: (digest[0],digest[1],digest[2],digest[3],digest[4],digest[5],digest[6],digest[7],digest[8],digest[9],digest[10],digest[11],digest[12],digest[13],digest[14],digest[15]))
+        if isEnabled, isTestingEnabled, let url = TestingDiagnosticDetails.link(value), (testingLinks.count < 4096 || testingLinks[id] != nil), testingLinks[id] != url {
+            testingLinks[id]=url
+            var details = TestingDiagnosticDetails(); details.resourceID=id; details.url=url; details.role=page ? "page":"media"
+            record(.testingResource,labels:["phase":"resource-link"],testing:details)
+        }
+        return id
     }
 
     public func begin(_ operation: DiagnosticContext.Operation, media: MediaCandidate? = nil, page: URL? = nil, parent: DiagnosticContext? = nil) -> DiagnosticContext {
@@ -158,8 +183,9 @@ public struct DiagnosticEvent: Codable, Sendable {
         return values
     }
 
-    public func record(_ kind: DiagnosticEvent.Kind, context: DiagnosticContext? = nil, labels: [String:String] = [:], numbers: [String:Double] = [:], codes: [String] = [], deduplicate: String? = nil) {
+    public func record(_ kind: DiagnosticEvent.Kind, context: DiagnosticContext? = nil, labels: [String:String] = [:], numbers: [String:Double] = [:], codes: [String] = [], deduplicate: String? = nil, testing: TestingDiagnosticDetails? = nil) {
         guard isEnabled else { return }
+        if [.testingResource, .testingCheck].contains(kind), !isTestingEnabled { return }
         let labels = Self.safeLabels(labels), numbers = Self.safeNumbers(numbers), codes = Self.safeCodes(codes)
         if let deduplicate {
             let fingerprint = (try? Self.encoder().encode(Fingerprint(labels:labels,numbers:kind == .mediaState ? numbers.filter { $0.key != "elapsed" } : numbers,codes:codes))) ?? Data()
@@ -168,7 +194,7 @@ public struct DiagnosticEvent: Codable, Sendable {
             deduplicated[deduplicate] = fingerprint
         }
         eventCount += 1
-        let event = DiagnosticEvent(sequence:eventCount,timestamp:clock(),elapsedSeconds:max(0,ProcessInfo.processInfo.systemUptime-start),kind:kind,context:context?.sanitized(),labels:labels,numbers:numbers,codes:codes)
+        let event = DiagnosticEvent(sequence:eventCount,timestamp:clock(),elapsedSeconds:max(0,ProcessInfo.processInfo.systemUptime-start),kind:kind,context:context?.sanitized(),labels:labels,numbers:numbers,codes:codes,testing:isTestingEnabled ? testing?.sanitized():nil)
         recent.append(event); if recent.count > 200 { recent.removeFirst(recent.count-200) }
         do {
             var data = try Self.encoder().encode(event); data.append(10)
@@ -247,10 +273,11 @@ public struct DiagnosticEvent: Codable, Sendable {
                 if var event=try? decoder.decode(DiagnosticEvent.self,from:Data(line)) {
                     event.labels=Self.safeLabels(event.labels); event.numbers=Self.safeNumbers(event.numbers); event.codes=Self.safeCodes(event.codes)
                     if var context=event.context { context.resource=context.resource?.sanitized(); event.context=context }
+                    event.testing = isTestingEnabled ? event.testing?.sanitized():nil
                     events.append(event)
                 } else { invalid += 1 }
             }
-            if id==sessionID { events.append(contentsOf:unsaved) }
+            if id==sessionID { events.append(contentsOf:unsaved.map { event in var e=event; e.testing=isTestingEnabled ? e.testing?.sanitized():nil; return e }) }
             var unique:[Int:DiagnosticEvent]=[:]; for event in events { unique[event.sequence]=event }
             events=unique.values.sorted { $0.sequence < $1.sequence }
             let expected=id==sessionID ? eventCount : max(events.last?.sequence ?? 0,marker?.firstMissingSequence ?? 0)
@@ -258,13 +285,18 @@ public struct DiagnosticEvent: Codable, Sendable {
             sessions.append(.init(sessionID:id,current:id==sessionID,complete:missing==0 && invalid==0 && marker==nil,invalidRecords:invalid,missingEvents:missing,missingEventCountIsExact:id==sessionID || marker==nil,storageFailureCodes:Self.safeCodes(marker?.codes ?? []),events:events))
         }
         var object=(try? JSONSerialization.jsonObject(with:Data(snapshot.utf8))) as? [String:Any] ?? [:]
-        object["reportSchemaVersion"]=2
+        object["reportSchemaVersion"]=3
+        object["testingDetailsEnabled"]=isTestingEnabled
+        object["testingDetailsCoverage"]=["resourceLinkLimit":4096,"registeredCurrentSessionLinks":testingLinks.count,"scope":"Explicit testing capture only. Earlier redacted sessions cannot recover full links. Request and resource timing reflects public APIs, not a complete WebKit or packet capture."] as [String:Any]
         object["generatedAtUTC"]=ISO8601DateFormatter().string(from:clock())
         object["sessionHistory"]=(try? JSONSerialization.jsonObject(with:Self.encoder().encode(sessions))) ?? []
         object["currentSessionID"]=sessionID.uuidString
         object["diagnosticsRecordingEnabled"]=isEnabled
         object["sessionHistoryCoverage"]=["currentEventCount":eventCount,"persistedEventCount":persistedEventCount,"storageFailureCodes":storageFailureCodes,"maximumRetainedSessions":maximumSessions,"maximumCurrentSessionBytes":maximumSessionBytes,"scope":"App-observed events while detailed history is enabled; not a complete WebKit network capture. Actions while disabled are not recorded. Current technical snapshot is generated only when requested."] as [String:Any]
         object["privacy"]="Includes website/media hosts, anonymous correlated IDs, timing and technical state. Excludes URL paths/queries, titles, cookies, credentials, header values, page content and decoded images. Local only until you share."
+        if isTestingEnabled {
+            object["privacy"]="TESTING REPORT: Includes full page/stream/segment links including signed query strings, selected request/response headers, cookie metadata without values, and browser readiness. Links may grant temporary media access. Excludes credential headers, cookie values, URL passwords, page content and video images. Local until shared."
+        } else { object.removeValue(forKey:"testingSnapshot") }
         guard let data=try? JSONSerialization.data(withJSONObject:object,options:[.prettyPrinted,.sortedKeys]),let text=String(data:data,encoding:.utf8) else { return snapshot }
         return text
     }

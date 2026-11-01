@@ -2,7 +2,7 @@
 
 A native web browser and immersive video player for Apple Vision Pro. Browse a website, start a compatible video and open it in a native Screen, VR180 or VR360 viewer.
 
-**Current version: 0.14.2 · Early source release · visionOS 26+**
+**Current version: 0.15.0 · Early source release · visionOS 26+**
 
 VisionStream has automated simulator coverage on visionOS 26 and 27 and has been installed on a physical Vision Pro. Physical-headset playback, comfort and broad website compatibility still need testing. It is not currently available through the App Store or TestFlight.
 
@@ -19,7 +19,15 @@ VisionStream has automated simulator coverage on visionOS 26 and 27 and has been
 - Playback, seeking, recentering and manual video tilt for positioning the picture while seated or reclined.
 - Auto-hiding immersive controls: tap the video once to reveal them just below where you face.
 - Supported MP4/HLS saves, a sequential save queue, offline playback and MP4 import/export.
-- Local troubleshooting reports; no automatic analytics or diagnostic uploads.
+- Local troubleshooting reports, optional full-link testing details and explicit playback checks; no automatic diagnostic uploads.
+
+## Testing diagnostics
+
+Open **Video tools → Playback details**, enable **Testing diagnostics · include full links**, then choose **Run playback checks**. After a failure, **Share report** exports current state and bounded retained session history. It includes full page/media/resource links, selected request/response headers, public timing/address metadata, cookie names/scope, webpage video readiness/events and native failure-resource evidence. Earlier redacted sessions cannot recover old links.
+
+The explicit checks make a bounded normal source request and prepare a separate muted paused native item. They do not start playback or establish visible VR playback. Apple/WebKit may not expose every resource or response. Normal and testing modes keep foreground inspection separate from AVPlayer responses.
+
+Public/App Store builds default testing mode off. Passwords, cookie values and authorization values stay excluded; ordinary signed stream links are included and may grant temporary access. Keep full reports private. Turning testing off redacts new exports; Delete diagnostic history removes retained details. [Details and private testing-build configuration](Docs/INSTALLATION.md).
 
 ## Screenshots
 

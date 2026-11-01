@@ -14,6 +14,8 @@ import SwiftUI
     @State private var showAddressSheet = false
     @State private var addressDraft = ""
     @State private var showDetails = false
+    private enum PendingSavedPlayback { case mp4(SavedVideo), hls(SavedHLSVideo) }
+    @State private var pendingSavedPlayback: PendingSavedPlayback?
     @State private var showDownloads = false
     @State private var pendingDownload: MediaCandidate?
     @State private var showFormat = false
@@ -223,10 +225,11 @@ import SwiftUI
                 if let error = app.playback.errorMessage { Text(error).font(.callout).foregroundStyle(.orange) }
             }.padding(30).frame(width: 620).onAppear { streamAddressFocused = true }.simulatorPanel(.stream)
         }
-        .sheet(isPresented: $showDownloads) {
-            DownloadsView(app: app, downloads: app.downloads, hls: app.hlsDownloads, watch: { video in showDownloads = false; watchSaved(video) }, watchHLS: { video in
-                showDownloads = false
-                watch(MediaCandidate(id: video.id.uuidString, source: "", title: video.name), savedHLS: video)
+        .sheet(isPresented: $showDownloads, onDismiss: playPendingSavedVideo) {
+            DownloadsView(app: app, downloads: app.downloads, hls: app.hlsDownloads, watch: { video in
+                pendingSavedPlayback = .mp4(video); showDownloads = false
+            }, watchHLS: { video in
+                pendingSavedPlayback = .hls(video); showDownloads = false
             })
         }
         .sheet(isPresented: $showBookmarks) {
@@ -270,7 +273,7 @@ import SwiftUI
         .onChange(of: showBookmarks) { _, visible in app.history.record(.controls,labels:["action":visible ? "bookmarks-opened":"bookmarks-closed"]) }
         .onChange(of: scenePhase, initial: true) { _, phase in observeScene(phase) }
         .onChange(of: app.tabs.activeID) { _, _ in
-            cancel(); selectedID = nil; pendingDownload = nil
+            cancel(); selectedID = nil; pendingDownload = nil; pendingSavedPlayback = nil
             showFinder = false; showLibrary = false; showFormat = false
             app.browser.startIfNeeded()
         }
@@ -340,8 +343,15 @@ import SwiftUI
             app.enqueueSave(contextual,cookies:cookies,userAgent:agent,cookieProvider: { [weak sourceBrowser] in await sourceBrowser?.cookies(for:$0) ?? [] })
         }
     }
-    private func watchSaved(_ video: SavedVideo) {
-        watch(MediaCandidate(id: video.id.uuidString, source: "", title: video.name), saved: video)
+    private func playPendingSavedVideo() {
+        guard let pending = pendingSavedPlayback else { return }
+        pendingSavedPlayback = nil
+        // Native preparation can finish faster than a sheet dismissal. Start
+        // only after dismissal so immersive window closing has a live presenter.
+        switch pending {
+        case .mp4(let video): watch(MediaCandidate(id: video.id.uuidString, source: "", title: video.name), saved: video)
+        case .hls(let video): watch(MediaCandidate(id: video.id.uuidString, source: "", title: video.name), savedHLS: video)
+        }
     }
 
     private func observeScene(_ phase: ScenePhase) {
@@ -422,6 +432,9 @@ import SwiftUI
         let token = UUID(); operation = token
         let sourceBrowser = app.browser
         let navigationVersion = sourceBrowser.navigationVersion
+        if app.history.isTestingEnabled {
+            Task { @MainActor in await sourceBrowser.captureTestingReadiness(phase:"handoff-requested") }
+        }
         // Reserve the transition before awaiting cookies to prevent double launches.
         app.playback.openingImmersive = true
         preparingTask = Task { @MainActor in
@@ -448,6 +461,9 @@ import SwiftUI
                 }
                 ready = await app.playback.prepare(requestedMedia, cookies: cookies, userAgent: userAgent, cookieProvider: { [weak sourceBrowser] url in await sourceBrowser?.cookies(for: url) ?? [] })
             }
+            if !ready, app.history.isTestingEnabled {
+                Task { @MainActor in await sourceBrowser.captureTestingReadiness(phase:"native-preparation-failed") }
+            }
             guard ready, !Task.isCancelled, operation == token else { return }
             guard app.browser === sourceBrowser, sourceBrowser.navigationVersion == navigationVersion else { app.playback.stop(); return }
             guard !Task.isCancelled, operation == token, app.playback.isReady else { return }
@@ -471,7 +487,16 @@ import SwiftUI
                 // The immersive view owns the controls attachment. Close this
                 // window only after native readiness and normal page pausing;
                 // immersive dismissal reopens the same in-memory browser.
-                dismissWindow(id: "browser")
+                if (saved != nil || savedHLS != nil), let scene = sourceBrowser.webView.window?.windowScene {
+                    // Address the actual browser scene after a modal-sheet handoff.
+                    // A scene-scoped request also exposes a public error callback,
+                    // unlike the identifier-only SwiftUI dismissal action.
+                    let history=app.history,context=app.playback.diagnosticContext
+                    history.record(.lifecycle,context:context,labels:["phase":"saved-browser-scene-close-requested"])
+                    UIApplication.shared.requestSceneSessionDestruction(scene.session,options:nil) { error in
+                        Task { @MainActor in history.record(.lifecycle,context:context,labels:["phase":"saved-browser-scene-close-failed"],codes:PlaybackDiagnostics.failure(error)) }
+                    }
+                } else { dismissWindow(id: "browser") }
             case .userCancelled: app.playback.stop()
             case .error: app.playback.fail("visionOS could not open the immersive space. Close other immersive experiences and try again.")
             @unknown default: app.playback.fail("The immersive space is unavailable.")

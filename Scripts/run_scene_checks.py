@@ -36,7 +36,7 @@ def main():
     parser.add_argument('--simulator', help='Optional existing dedicated Automation Lab simulator')
     parser.add_argument('--fixture-session', type=Path, help='Optional existing fixture metadata for that simulator')
     parser.add_argument('--build-root', type=Path, default=ROOT/'DerivedData/OnDeviceClean')
-    parser.add_argument('--cases', nargs='+', choices=DEFAULT_CASES+['auto-play', 'soak', 'saved-state', 'downloads', 'finder', 'interrupted', 'quality', 'quality4k', 'controls', 'controls-format', 'controls-quality', 'controls-hide'])
+    parser.add_argument('--cases', nargs='+', choices=DEFAULT_CASES+['diagnostics', 'auto-play', 'soak', 'saved-state', 'downloads', 'finder', 'interrupted', 'quality', 'quality4k', 'controls', 'controls-format', 'controls-quality', 'controls-hide'])
     parser.add_argument('--public-extraction', action='store_true', help='Opt into the fixed public-domain NASA finder scenario')
     parser.add_argument('--soak-seconds', type=int, default=600, help='Duration of the opt-in soak case, from 60 to 1800 seconds')
     parser.add_argument('--case-timeout', type=int, default=180)
@@ -126,6 +126,9 @@ def main():
             results.append({'scenario': name, 'status': result['status'], 'failureCode': result.get('failureCode'),
                             'passedChecks': len(result.get('checks', [])), 'evidence': str(output/(name+'.json'))})
             save(); print(json.dumps(results[-1]), flush=True)
+            if name == 'diagnostics' or result['status'] != 'passed':
+                capture='diagnostics.png' if name == 'diagnostics' else name+'-failure.png'
+                simctl('io', udid, 'screenshot', str(output/capture), check=False)
             simctl('terminate', udid, BUNDLE, check=False)
             if result['status'] != 'passed': break
         metadata['status'] = 'passed' if len(results) == len(cases) and all(r['status'] == 'passed' for r in results) else 'failed'

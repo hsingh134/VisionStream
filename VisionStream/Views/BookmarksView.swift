@@ -119,6 +119,8 @@ import SwiftUI
             Divider()
             Toggle("Detailed troubleshooting history",isOn:Binding(get:{ app.diagnosticsEnabled },set:app.setDiagnosticsEnabled))
             Text("When on, VisionStream stores website hosts and technical activity on this device. Private page links, passwords, cookies and video images are excluded. Nothing is uploaded automatically. Turning this off keeps older history until you delete it.").font(.caption).foregroundStyle(.secondary)
+            Toggle("Testing diagnostics · include full links",isOn:Binding(get:{ app.testingDiagnosticsEnabled },set:app.setTestingDiagnosticsEnabled))
+            Text("Testing mode turns history on and adds full page/stream links, selected headers and readiness details. Signed links may grant temporary access. Turning this off removes testing details from new exports; Delete diagnostic history erases stored originals. Nothing is uploaded automatically.").font(.caption).foregroundStyle(.secondary)
             HStack {
                 Button("Privacy policy",systemImage:"hand.raised") { showPrivacy=true }
                 Button("Delete diagnostic history…",systemImage:"trash",role:.destructive) { confirmDeleteHistory=true }

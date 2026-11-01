@@ -1,5 +1,11 @@
 # Automated testing
 
+## Testing profile and active probes (0.15.0)
+
+Core tests cover full-link validation, credential exclusions, selected headers, persistence, deletion and redaction of previously recorded testing data after opt-out. Native tests use original CC0 HTTPS fixtures to check a real HTTP 412 response, excluded secret response headers/cookie values, paused-probe outcomes, webpage clock advancement and an inline script error before document-end injection. Private build-default opt-in and persisted opt-out are tested independently. An injected diagnostic store owns its capture profile; it cannot inherit full-link opt-in from unrelated saved UI preferences. This prevents a prior full-link scene from contaminating later redaction checks.
+
+The `diagnostics` scene opens the actual Playback details sheet, invokes the same Run playback checks action as its button and checks seven outcomes: mounting, completion, full-link/probe evidence, bounded screen preview with complete JSON export, unaffected real webpage playback, redacted replacement export after opt-out, and visible report. It captures `diagnostics.png` using the original CC0 fixture. Each non-diagnostics scene explicitly starts with the redacted profile, and form dismissal waits for the report export/action task and presentation transition. Node detector tests also verify bounded event/error observations without changing source, playback or position. This uses existing simulator-only UUID/HTTPS-loopback restrictions; it cannot control a physical headset or arbitrary remote site. Run it with `python3 Scripts/run_scene_checks.py --cases diagnostics --runtime 26.0` (or 27.0). Physical gaze/pinch and live CDN requests remain separate acceptance work.
+
 ## Playlist responses (0.14.2)
 
 The playback-recovery native suite tests actual foreground playlist responses for 403, 404, a blocked 302 redirect and HTTP 200 with a non-playlist body. It checks the snapshot's exact status/outcome with detailed recording off, distinguishes foreground transport, excludes private test queries/paths and verifies a subsequent MP4 clears the old summary. Existing retained-master cookie coverage also checks a successful parsed HTTP 200. These do not identify which response the unavailable live CDN returned, and a foreground check does not prove AVPlayer made an equivalent request.

@@ -1,5 +1,5 @@
 {
-  "reviewed": "2026-10-26",
+  "reviewed": "2026-11-01",
   "developerOperatedAccounts": false,
   "automaticAnalyticsOrCrashUpload": false,
   "advertisingSDKs": false,
@@ -10,7 +10,8 @@
     "Intentional bookmark names and addresses",
     "Saved media and native background transfer journal",
     "Optional bounded host-level diagnostics, off on fresh installations",
-    "Current technical state in memory and explicit copy/share reports"
+    "Current technical state in memory and explicit copy/share reports",
+    "Optional full-link testing diagnostics: page/media/resource URLs with signed queries, selected headers, cookie names/scope, public request timing/address metadata, typed browser readiness/errors; public/App Store defaults off, no automatic upload"
   ],
   "networkDestinations": "User-selected websites, source/media/library servers and their redirects; these services receive normal IP/request information and have their own practices.",
   "developerCollectionAssessment": "No automatic developer-operated collection is implemented. On-device processing is not collected data under Apple's definition. User-directed open-web navigation is distinct from developer collection. Do not claim third-party websites do not track.",
@@ -20,5 +21,6 @@
   "appStorePrivacyDraft": "No developer-collected data for the current local-only app; owner must verify actual support/hosting practices, all bundled dependencies and final questionnaire before submission.",
   "policyResource": "VisionStream/Resources/PrivacyPolicy.txt",
   "officialReference": "https://developer.apple.com/app-store/app-privacy-details/",
-  "finalQuestionnaireCompleted": false
+  "finalQuestionnaireCompleted": false,
+  "testingReportAssessment": "Full signed links may grant temporary access. Known password query fields, cookie values and authorization-header values remain excluded. Active checks send additional bounded normal requests only when explicitly requested. Owner-authorized private build defaults can be enabled; persisted user opt-out wins. Turning off redacts exports; deletion removes retained details."
 }

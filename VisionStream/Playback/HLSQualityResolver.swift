@@ -21,8 +21,10 @@ final class HLSQualityRequest: NSObject, URLSessionDataDelegate, @unchecked Send
     private var observedResponse:ResponseSummary?
     var responseSummary:ResponseSummary? { lock.lock();defer { lock.unlock() };return observedResponse }
     private let kind: Kind
+    private let diagnosticObserver: (@Sendable (TestingDiagnosticDetails) -> Void)?
+    private let timeoutOverride: TimeInterval?
     private var expectedBytes: Int?
-    init(kind: Kind = .master) { self.kind = kind; super.init() }
+    init(kind: Kind = .master, timeout: TimeInterval? = nil, diagnosticObserver: (@Sendable (TestingDiagnosticDetails) -> Void)? = nil) { self.kind = kind; self.timeoutOverride=timeout; self.diagnosticObserver=diagnosticObserver; super.init() }
     private var maximumBytes: Int { kind == .master ? HLSManifest.maximumBytes : MP4SphericalMetadata.maximumPrefixBytes }
     private let lock = NSLock()
     private var continuation: CheckedContinuation<Data, any Error>?
@@ -49,11 +51,12 @@ final class HLSQualityRequest: NSObject, URLSessionDataDelegate, @unchecked Send
         configuration.httpShouldSetCookies = true
         configuration.urlCredentialStorage = nil
         configuration.urlCache = nil
-        configuration.timeoutIntervalForRequest = kind == .master ? 20 : 5
-        configuration.timeoutIntervalForResource = kind == .master ? 30 : 8
+        configuration.timeoutIntervalForRequest = timeoutOverride.map { max(2,min(20,$0)) } ?? (kind == .master ? 20 : 5)
+        configuration.timeoutIntervalForResource = timeoutOverride.map { max(3,min(30,$0+2)) } ?? (kind == .master ? 30 : 8)
         let queue = OperationQueue()
         queue.maxConcurrentOperationCount = 1
         let session = URLSession(configuration: configuration, delegate: self, delegateQueue: queue)
+        diagnosticObserver?(TestingDiagnosticDetails.request(request))
         let task = session.dataTask(with: request)
         lock.lock()
         guard !cancelled else {
@@ -97,6 +100,7 @@ final class HLSQualityRequest: NSObject, URLSessionDataDelegate, @unchecked Send
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
                     completionHandler: @escaping @Sendable (URLSession.ResponseDisposition) -> Void) {
         if let http=response as? HTTPURLResponse {
+            diagnosticObserver?(TestingDiagnosticDetails.response(http))
             lock.lock();observedResponse = .init(status:http.statusCode,expectedBytes:http.expectedContentLength);lock.unlock()
             if kind == .resourceHeaders || http.statusCode >= 300 {
                 completionHandler(.cancel)
@@ -126,8 +130,13 @@ final class HLSQualityRequest: NSObject, URLSessionDataDelegate, @unchecked Send
         else { finish(.success(data)) }
     }
 
+    func urlSession(_ session: URLSession, task: URLSessionTask, didFinishCollecting metrics: URLSessionTaskMetrics) {
+        for transaction in metrics.transactionMetrics.prefix(16) { diagnosticObserver?(TestingDiagnosticDetails.transaction(transaction)) }
+    }
+
     func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
                     newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
+        diagnosticObserver?(TestingDiagnosticDetails.response(response))
         lock.lock();observedResponse = .init(status:response.statusCode,expectedBytes:response.expectedContentLength);lock.unlock()
         completionHandler(nil)
     }

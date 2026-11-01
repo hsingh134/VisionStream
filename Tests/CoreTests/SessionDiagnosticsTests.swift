@@ -110,4 +110,41 @@ import XCTest
         let sessions=try XCTUnwrap(try object(current)["sessionHistory"] as? [[String:Any]])
         XCTAssertEqual(sessions.count,2); XCTAssertTrue(sessions.contains { $0["sessionID"] as? String == current.sessionID.uuidString })
     }
+    func testTestingModeIncludesSignedLinksAndSelectedHeadersButNeverCredentialValues() async throws {
+        let root=directory();defer { try? FileManager.default.removeItem(at:root) }
+        let history=SessionDiagnostics(root:root)
+        history.setTestingEnabled(true)
+        let source="https://user:PRIVATE_PASSWORD@cdn.example/private-video.m3u8?signature=TEST_SIGNED_LINK&password=PRIVATE_QUERY_PASSWORD"
+        let context=history.begin(.playback,media:.init(id:"test",source:source,pageURL:"https://site.example/watch?id=TEST_PAGE"))
+        var request=URLRequest(url:try XCTUnwrap(URL(string:source)))
+        request.setValue("Bearer PRIVATE_AUTH_VALUE",forHTTPHeaderField:"Authorization")
+        request.setValue("session=PRIVATE_COOKIE_VALUE",forHTTPHeaderField:"Cookie")
+        request.setValue("VisionStream-TEST-AGENT",forHTTPHeaderField:"User-Agent")
+        request.setValue("bytes=0-1",forHTTPHeaderField:"Range")
+        history.record(.testingCheck,context:context,labels:["phase":"request"],testing:.request(request))
+        let response=try XCTUnwrap(HTTPURLResponse(url:try XCTUnwrap(URL(string:"https://cdn.example/private-video.m3u8?signature=TEST_SIGNED_LINK")),statusCode:412,httpVersion:nil,headerFields:["Set-Cookie":"session=PRIVATE_SET_COOKIE_VALUE","ETag":"TEST_ETAG","Content-Type":"text/plain","X-Secret":"PRIVATE_CUSTOM_VALUE"]))
+        history.record(.testingCheck,context:context,labels:["phase":"response"],testing:.response(response))
+        let full=history.report(snapshot:"{}")
+        XCTAssertTrue(full.contains("private-video.m3u8"));XCTAssertTrue(full.contains("TEST_SIGNED_LINK"));XCTAssertTrue(full.contains("TEST_PAGE"))
+        XCTAssertTrue(full.contains("VisionStream-TEST-AGENT"));XCTAssertTrue(full.contains("TEST_ETAG"));XCTAssertTrue(full.contains("412"))
+        for secret in ["PRIVATE_PASSWORD","PRIVATE_QUERY_PASSWORD","PRIVATE_AUTH_VALUE","PRIVATE_COOKIE_VALUE","PRIVATE_SET_COOKIE_VALUE","PRIVATE_CUSTOM_VALUE"] { XCTAssertFalse(full.contains(secret),secret) }
+        history.setTestingEnabled(false)
+        let normal=history.report(snapshot:"{\"testingSnapshot\":{\"source\":\"TEST_SIGNED_LINK\"}}")
+        XCTAssertFalse(normal.contains("TEST_SIGNED_LINK"));XCTAssertFalse(normal.contains("private-video"));XCTAssertFalse(normal.contains("VisionStream-TEST-AGENT"))
+        let restored=SessionDiagnostics(root:root);restored.setTestingEnabled(true)
+        XCTAssertTrue(restored.report(snapshot:"{}").contains("TEST_SIGNED_LINK"))
+        try restored.deleteHistory()
+        XCTAssertFalse(restored.isTestingEnabled);XCTAssertFalse(restored.report(snapshot:"{}").contains("TEST_SIGNED_LINK"))
+    }
+    func testTestingLinkValidationPreservesQueryEncodingAndRejectsLocalFiles() {
+        let signed="https://cdn.example/a.m3u8?signature=a%2Bb%2Fc%3D&expires=123"
+        XCTAssertEqual(TestingDiagnosticDetails.link(signed),signed)
+        XCTAssertNil(TestingDiagnosticDetails.link("file:///Users/private/movie.mp4"))
+        XCTAssertNil(TestingDiagnosticDetails.link("javascript:alert(1)"))
+        XCTAssertNil(TestingDiagnosticDetails.link("https://example.com/"+String(repeating:"x",count:17_000)))
+        XCTAssertEqual(TestingDiagnosticDetails.headerNames(["Range","range","Bad\nHeader"]),["range"])
+        let values=TestingDiagnosticDetails.headers(["Authorization":"PRIVATE","Cookie":"PRIVATE","Origin":"https://user:PRIVATE@example.com","Range":"bytes=0-1"],response:false)
+        XCTAssertNil(values["authorization"]);XCTAssertNil(values["cookie"]);XCTAssertEqual(values["origin"],"https://example.com");XCTAssertEqual(values["range"],"bytes=0-1")
+    }
+
 }

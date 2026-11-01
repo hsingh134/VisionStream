@@ -1,3 +1,7 @@
 // Copy to Local.xcconfig (gitignored), then enter values from your Apple developer account.
 DEVELOPMENT_TEAM = YOURTEAMID
 PRODUCT_BUNDLE_IDENTIFIER = com.yourname.VisionStream
+
+// Optional owner-authorized device testing; public/App Store builds default off.
+// Full links may grant temporary media access. Explicit in-app opt-out takes priority.
+// VISIONSTREAM_TESTING_DIAGNOSTICS_DEFAULT[sdk=xros*] = YES

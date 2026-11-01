@@ -143,6 +143,53 @@ import XCTest
         app.playback.stop(); app.playback.resetDiagnosticsWhenIdle()
         XCTAssertNil(app.playback.manifestInspection)
     }
+    func testTestingInspectionCaptures412HeadersAndLinksWithoutCredentialValues() async throws {
+        let origin=try XCTUnwrap(ProcessInfo.processInfo.environment["VISIONSTREAM_TEST_ORIGIN"].flatMap(URL.init(string:)))
+        let root=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at:root) }
+        let history=SessionDiagnostics(root:root);history.setTestingEnabled(true)
+        let url=origin.appendingPathComponent("testing-diagnostic/master.m3u8").appending(queryItems:[.init(name:"signature",value:"TEST_FULL_LINK")])
+        let context=history.begin(.playback,media:.init(id:"test",source:url.absoluteString))
+        var request=URLRequest(url:url)
+        request.setValue("Bearer PRIVATE_AUTHORIZATION",forHTTPHeaderField:"Authorization")
+        request.setValue("session=PRIVATE_REQUEST_COOKIE",forHTTPHeaderField:"Cookie")
+        request.setValue("VisionStream-TEST-AGENT",forHTTPHeaderField:"User-Agent")
+        let client=HLSQualityRequest(timeout:3,diagnosticObserver:history.testingObserver(context:context,phase:"fixture-412-check"))
+        do { _ = try await client.load(request);XCTFail("Expected actual HTTP 412") } catch { }
+        XCTAssertEqual(client.responseSummary?.status,412)
+        var text=history.report(snapshot:"{}"),end=Date().addingTimeInterval(3)
+        while !text.contains("TEST_DIAGNOSTIC_ETAG"),Date()<end { try await Task.sleep(for:.milliseconds(20));text=history.report(snapshot:"{}") }
+        XCTAssertTrue(text.contains("TEST_FULL_LINK"));XCTAssertTrue(text.contains("TEST_DIAGNOSTIC_ETAG"));XCTAssertTrue(text.contains("412"));XCTAssertTrue(text.contains("VisionStream-TEST-AGENT"))
+        for secret in ["PRIVATE_AUTHORIZATION","PRIVATE_REQUEST_COOKIE","PRIVATE_DIAGNOSTIC_COOKIE","PRIVATE_DIAGNOSTIC_HEADER"] { XCTAssertFalse(text.contains(secret),secret) }
+        history.setTestingEnabled(false)
+        XCTAssertFalse(history.report(snapshot:"{}").contains("TEST_FULL_LINK"))
+    }
+    func testActiveChecksCaptureWebReadinessAndPausedNativeProbeWithoutInterruptingPage() async throws {
+        let origin=try XCTUnwrap(ProcessInfo.processInfo.environment["VISIONSTREAM_TEST_ORIGIN"].flatMap(URL.init(string:)))
+        let root=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let suite="TestingDiagnostics-"+UUID().uuidString
+        let defaults=try XCTUnwrap(UserDefaults(suiteName:suite))
+        defer { defaults.removePersistentDomain(forName:suite) }
+        let history=SessionDiagnostics(root:root),app=AppModel(history:history,privacyDefaults:defaults)
+        app.setTestingDiagnosticsEnabled(true)
+        let scene=try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first),window=try XCTUnwrap(scene.windows.first { !$0.isHidden })
+        app.browser.webView.frame=window.bounds;window.addSubview(app.browser.webView)
+        defer { app.browser.webView.removeFromSuperview();app.tabs.pages.forEach { $0.closeTab() };app.playback.stop();try? FileManager.default.removeItem(at:root) }
+        app.browser.open(origin.appendingPathComponent("testing-early-error"))
+        let end=Date().addingTimeInterval(25)
+        while app.browser.candidates.isEmpty,Date()<end { try await Task.sleep(for:.milliseconds(50)) }
+        _ = try XCTUnwrap(app.browser.candidates.first)
+        _ = try await app.browser.webView.callAsyncJavaScript("const v=document.querySelector('video');v.loop=true;await v.play();return true",in:nil,contentWorld:.page)
+        await app.runPlaybackChecks()
+        XCTAssertFalse(app.testingChecksRunning);XCTAssertTrue(app.testingChecksMessage?.contains("complete") == true)
+        XCTAssertFalse(app.playback.isReady);XCTAssertEqual(app.playback.diagnosticStage,"not-attempted")
+        let running=try await app.browser.webView.evaluateJavaScript("!document.querySelector('video').paused") as? Bool
+        XCTAssertEqual(running,true)
+        let text=app.playbackReport
+        XCTAssertTrue(text.contains("testing-early-error"));XCTAssertTrue(text.contains("TypeError"));XCTAssertFalse(text.contains("PRIVATE_ERROR_MESSAGE_NOT_CAPTURED"));XCTAssertTrue(text.contains("readyState"));XCTAssertTrue(text.contains("observedAtMs"));XCTAssertTrue(text.contains("active-source-check-completed"));XCTAssertTrue(text.contains("paused-native-check-completed"));XCTAssertTrue(text.contains("ready-without-playback"))
+        app.setTestingDiagnosticsEnabled(false)
+        XCTAssertFalse(app.playbackReport.contains(origin.absoluteString))
+    }
     func testControlsTimerKeepsInteractionAndPausedVideoVisible() {
         let controls = ImmersiveControlsModel()
         controls.reset(now: 0)

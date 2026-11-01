@@ -7,6 +7,13 @@
   const encrypted = new WeakSet();
   const watched = new WeakSet();
   const playIntents = new WeakMap();
+  const videoEvents = new WeakMap();
+  const scriptErrors = globalThis.visionStreamTestingBootstrap?.errors || [];
+  const epoch = () => performance.timeOrigin + performance.now();
+  if (!globalThis.visionStreamTestingBootstrap) window.addEventListener("error", event => {
+    scriptErrors.push({name: event.error?.name || "resource-error", source: event.filename || event.target?.src || null, line: event.lineno || 0, column: event.colno || 0, timeMs: epoch()});
+    if (scriptErrors.length > 16) scriptErrors.shift();
+  }, true);
   let sequence = 0;
   let timer = null;
   let latest = [];
@@ -82,8 +89,11 @@
       if (!ids.has(video)) ids.set(video, "video-" + (++sequence));
       if (!watched.has(video)) {
         watched.add(video);
-        for (const name of ["loadedmetadata", "play", "playing", "emptied", "durationchange", "error", "waiting", "stalled", "pause", "ended"])
-          video.addEventListener(name, schedule);
+        for (const name of ["loadedmetadata", "loadeddata", "play", "playing", "emptied", "durationchange", "error", "waiting", "stalled", "pause", "ended", "seeking", "seeked", "canplay", "canplaythrough"])
+          video.addEventListener(name, () => {
+            const events = videoEvents.get(video) || []; events.push({name, timeMs:epoch()});
+            if (events.length > 32) events.shift(); videoEvents.set(video, events); schedule();
+          });
         video.addEventListener("encrypted", () => { encrypted.add(video); schedule(); });
       }
       let sources = [];
@@ -139,7 +149,26 @@
     video.pause();
     return true;
   }
-  globalThis.visionStreamDetector = {scan, pause};
+  function diagnostics() {
+    const finite = value => Number.isFinite(value) ? value : null;
+    const ranges = value => Array.from({length:Math.min(value.length,8)}, (_,i) => [value.start(i),value.end(i)]);
+    const navigation = performance.getEntriesByType("navigation")[0];
+    const timings = {};
+    for (const key of ["startTime","duration","fetchStart","domainLookupStart","domainLookupEnd","connectStart","connectEnd","secureConnectionStart","requestStart","responseStart","responseEnd","domInteractive","domContentLoadedEventEnd","domComplete","loadEventEnd"]) if (navigation && Number.isFinite(navigation[key])) timings[key] = navigation[key];
+    return {
+      url:location.href, readyState:document.readyState, visibility:document.visibilityState, userAgent:navigator.userAgent,
+      observedAtMs:epoch(), navigation:timings, scriptErrors,
+      resources:performance.getEntriesByType("resource").slice(-64).map(r => ({url:r.name,initiator:r.initiatorType || "unknown",nextHop:r.nextHopProtocol || "unknown",startMs:r.startTime,durationMs:r.duration,requestStartMs:r.requestStart || 0,responseStartMs:r.responseStart || 0,responseEndMs:r.responseEnd || 0,transferBytes:r.transferSize || 0,encodedBytes:r.encodedBodySize || 0,decodedBytes:r.decodedBodySize || 0})),
+      videos:videos().map(video => {
+        const quality = video.getVideoPlaybackQuality?.();
+        return {videoID:ids.get(video) || "",source:video.currentSrc || (hasSource(video) ? video.src : null),attributeSource:hasSource(video) ? video.src : null,
+          readyState:video.readyState,networkState:video.networkState,errorCode:video.error?.code || 0,paused:video.paused,muted:video.muted,visible:visible(video),adMarked:advertisement(video),
+          width:video.videoWidth,height:video.videoHeight,currentTime:finite(video.currentTime) || 0,duration:finite(video.duration),frames:quality?.totalVideoFrames ?? null,droppedFrames:quality?.droppedVideoFrames ?? null,
+          buffered:ranges(video.buffered),seekable:ranges(video.seekable),events:videoEvents.get(video) || []};
+      })
+    };
+  }
+  globalThis.visionStreamDetector = {scan, pause, diagnostics};
   new MutationObserver(schedule).observe(document, {subtree: true, childList: true, attributes: true, attributeFilter: ["src", "type"]});
   setInterval(scan, 1500);
   scan();

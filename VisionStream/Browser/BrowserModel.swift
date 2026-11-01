@@ -84,6 +84,9 @@ final class BrowserModel: NSObject, Identifiable, WKNavigationDelegate, WKUIDele
         let store=config.websiteDataStore
         dataStore = store
         cookieSnapshot=BrowserCookieSnapshot { callback in store.httpCookieStore.getAllCookies(callback) }
+        if let url=Bundle.main.url(forResource:"TestingBootstrap",withExtension:"js"),let source=try? String(contentsOf:url,encoding:.utf8) {
+            config.userContentController.addUserScript(WKUserScript(source:source,injectionTime:.atDocumentStart,forMainFrameOnly:false,in:.defaultClient))
+        }
         if let url = Bundle.main.url(forResource: "VideoDetector", withExtension: "js"),
            let source = try? String(contentsOf: url, encoding: .utf8) {
             config.userContentController.addUserScript(WKUserScript(
@@ -187,6 +190,23 @@ final class BrowserModel: NSObject, Identifiable, WKNavigationDelegate, WKUIDele
 
     func cookies(for url: URL) async -> [HTTPCookie] {
         await cookieSnapshot.cookies(for:url)
+    }
+
+    @discardableResult func captureTestingReadiness(phase: String) async -> TestingBrowserState? {
+        guard let history=diagnostics, history.isTestingEnabled else { return nil }
+        let version=navigationVersion, context=diagnosticContext
+        let targets: [WKFrameInfo?] = [nil] + frames.values.filter { !$0.isMainFrame }.prefix(2).map { Optional($0) }
+        var main:TestingBrowserState?
+        for (index,frame) in targets.enumerated() {
+            guard !Task.isCancelled, navigationVersion==version, history.isTestingEnabled else { return nil }
+            let state=await BrowserTestingSnapshot.read(webView,frame:frame)
+            guard !Task.isCancelled, navigationVersion==version else { return nil }
+            if index==0 { main=state }
+            var details=TestingDiagnosticDetails();details.role="browser-readiness";details.browser=state
+            history.record(.testingCheck,context:context,labels:["phase":phase,"status":state == nil ? "unavailable":"observed"],
+                numbers:["frameMain":index==0 ? 1:0,"pageLoading":isLoading ? 1:0,"progress":webView.estimatedProgress,"navigationVersion":Double(version),"tabActive":isActiveTab ? 1:0],testing:details)
+        }
+        return main
     }
 
     func freshCandidate(for candidate: MediaCandidate) -> MediaCandidate {

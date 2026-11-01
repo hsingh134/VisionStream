@@ -1,5 +1,15 @@
 # Installation and signing
 
+## Testing diagnostics (0.15.0)
+
+Open **Video tools → Playback details**, enable **Testing diagnostics · include full links**, and choose **Run playback checks**. After reproducing the failure, use **Share report**. This records future observations; earlier redacted history cannot recover its old links. The existing Playback details location is unchanged.
+
+Testing reports include full page/media/resource links and signed query strings, selected request/response headers, cookie names/scope (not values), available transport timings/addresses, webpage video readiness/events, script-error type/location and native failure-resource links. Link values appear in the JSON report and can be copied/opened externally. Keep these reports private: signed URLs may grant temporary media access. Passwords, cookie values and authorization-header values remain excluded. No automatic report upload is implemented.
+
+Run playback checks makes a bounded fresh request to the exact current source and prepares a separate muted, paused native item. It never starts the movie or changes the normal player. A ready probe is not proof of decoded/immersive playback. Extra requests can affect timing; reproduce normally as well. Apple/WebKit may not expose every dependency or response.
+
+Public and App Store configurations default testing mode off. An owner can explicitly set `VISIONSTREAM_TESTING_DIAGNOSTICS_DEFAULT[sdk=xros*] = YES` in ignored `Config/Local.xcconfig` for an authorized testing build. A saved user opt-out overrides that default. Turning the toggle off redacts new exports; **Delete diagnostic history** removes retained full details and generated reports.
+
 Current 0.11.0 release preparation is documented in `Submission/README.md`. Building and simulator tests are free. A free Apple Account can use Xcode Personal Team for personal device testing with seven-day provisioning; App Store/TestFlight distribution requires paid membership. The supplied device archive remains unsigned until you configure your own team. No purchase or enrollment is performed by this project. Keep the `VisionStream` scheme for the existing personal installation; `VisionStream-AppStore` is separate distribution preparation. Public policy/contact and encryption answers are deliberately not invented.
 
 
