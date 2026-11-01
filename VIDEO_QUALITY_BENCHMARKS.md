@@ -4,7 +4,7 @@ VisionStream 0.16.0 (39), 1 November 2026. Baseline: 0.15.0 (38), `583fe1c`. The
 
 ## Test environment and evidence
 
-Apple M4 Max host; Xcode 27.1; visionOS 27 SDK; deployment target 26.0; dedicated visionOS 26.0 and 27.0 simulators. Original locally generated CC0 footage only. Sources include 4096 × 2048 VR180 SBS fine lines/checker/text/gradients/stereo disparity/flashing motion marker, a low-bitrate version, 8192 × 4096 Main10 mono, BT.709 full/limited-range colour bars and BT.2020 PQ/HLG steps. No third-party footage was downloaded for this audit.
+Apple M4 Max host; Xcode 27.1; visionOS 27 SDK; deployment target 26.0; dedicated visionOS 26.0 and 27.0 simulators. Original locally generated CC0 footage only. Sources include 4096 × 2048 VR180 SBS fine lines/checker/text/gradients/stereo disparity/flashing motion marker, a low-bitrate version, 8192 × 4096 Main10 mono, BT.709 full/limited-range colour bars, BT.2020 PQ/HLG steps and a full-range 1,024-step Main10 neutral ramp. No third-party footage was downloaded for this audit.
 
 Private detailed evidence is retained in `TestResults/video-quality-audit-0.16.0/`; public source excludes test reports, generated media, signing material and owner configuration. The generator writes colour/reference metadata and checks that encoded primaries, transfer tags and container colour information are present.
 
@@ -38,6 +38,8 @@ A full-width 8192-pixel mono VR360 source/texture has an estimated 22.756 horizo
 
 ## Native colour evidence
 
+The added **actual Main10 decode** check uses an encoded 1,024-step neutral ramp at its native 1024 × 128 dimensions. Both visionOS runtimes produce **1,024 distinct finite red-channel values** in the half-float output, with no large gradient reversals. This is direct decoded-pixel evidence of gradation beyond an ordinary 256-level RGB bottleneck, independently of requested storage type and the separate synthetic GPU ramp test. It is not a claim that every codec/source/internal AVFoundation stage has identical precision.
+
 Both simulator runtimes decode tagged full/limited BT.709 bars through the production half-float output settings; converted RGB agrees with the reference within the stated 0.035 component tolerance, and both ranges agree within 0.025. These tolerances include encoding, chroma reconstruction and half precision, not calibrated display error.
 
 The known Main10 BT.2020 PQ neutral steps produced linear P3 values on visionOS 26:
@@ -66,13 +68,14 @@ These are **M4 Max preparation-command timings**, excluding decode conversion, R
 ## Automated results
 
 - Release simulator build and signed physical-device build succeed; device signature verification succeeds.
-- Full native visionOS 26 suite: **219 passed, 12 optional skips, 0 failures** (231 methods).
-- Full native visionOS 27 suite: **219 passed, 12 optional skips, 0 failures** (231 methods).
-- Six dedicated native quality methods per runtime cover actual colour/range/HDR decode, attachment validation, paused mode switching, bound resources and full 8K mono. Production GPU readback contributes **9,248 checks** per runtime; the Mac probe also passes 9,248.
+- Full native visionOS 26 suite: **220 passed, 12 optional skips, 0 failures** (232 methods).
+- Full native visionOS 27 suite: **220 passed, 12 optional skips, 0 failures** (232 methods).
+- Seven dedicated native quality methods per runtime cover actual colour/range/HDR decode, attachment validation, paused mode switching, bound resources and full 8K mono. Production GPU readback contributes **9,248 checks** per runtime; the Mac probe also passes 9,248.
 - Host Swift Package: **106 passed**. Standalone: **100 methods, 1,949 assertions, 0 failures**.
 - Legacy Metal regression: **12 configurations, 1,024 pixel assertions**. Mac streaming: **12 MP4/HLS decode probes**.
 - HTTPS fixture regressions: **19 passed**; resolver: **19 passed**; automation/evidence: **16 passed**; detector unit tests: **15 passed**; submission/public-source scripts: **6 passed**. Both shipped JavaScript resources pass syntax checks.
-- Real mounted-scene suites: **19 scenarios / 184 named checks per runtime**, including Picture/A-B/overlay, forms, tabs, user-play handoff, downloads, diagnostics, transport, hiding controls, libraries, cancellation, re-entry, restoration, highest-quality HLS and a 120-second soak. They use shared production actions and the actual SwiftUI immersive-space environment, not physical gaze/pinch injection.
+- Broad mounted-scene suites: **19 scenarios / 184 named checks per runtime**, including Picture/A-B/overlay, forms, tabs, user-play handoff, downloads, diagnostics, transport, hiding controls, libraries, cancellation, re-entry, restoration, highest-quality HLS and a 120-second soak. These precede the final diagnostic-publication throttle; shaders, geometry, quality policy and source handling are unchanged by that fix.
+- Final current-binary scene regression: **7 scenarios / 83 named checks per runtime**, covering Picture/same-paused-frame A/B, controls/hiding, diagnostics, MP4, HLS and downloads after the one-Hz publication fix. Both current-binary full native suites also pass the 220/12/0 counts above. Scene drivers invoke shared production actions and the real SwiftUI immersive space, not physical gaze/pinch input.
 
 The 26 soak received 3,537 frames in 121.90 seconds while rendering the controlled 3840 × 1920 source and exercising controls/quality changes. Its peak simulator resident memory was 1.64 GB; the final sample was 467 MB. These process samples include warm-up/platform behaviour and are not a memory-leak proof or physical sustained-decoder/display benchmark. A separate 27 soak also passed its cadence and bounded-memory assertions. Exact counters remain in the private JSON evidence.
 
@@ -86,7 +89,7 @@ The pre-existing desktop click driver initially failed: its inactive/hidden owne
 
 Initial lossless H.264 fixtures selected High 4:4:4 Predictive and failed decode. QP 1 High-profile chroma was wrong in both simulator runtimes through **both old BGRA and new half-float outputs**; QP 18 bars pass and independent FFmpeg RGB readback confirms the reference. FFmpeg 9 also required frame `setparams` tags to retain primaries/transfer metadata; encoder flags alone produced unspecified tags. The final generator validates these conditions.
 
-An early mip assertion read the wrong level through simulator `getBytes(mipmapLevel:)`. Level-zero texture-view reads and a separate GPU copy agreed on correct mip data. A temporary compute generator was therefore reverted. Early rounded P3 coefficient/half-float tolerances were corrected to a D65 matrix and a precision-scaled tolerance. Failed logs are retained and excluded from final pass counts. A final repeated native launch stalled in the simulator's dyld system loader before app code started; its sample was retained, the attempt was cancelled and the owned lab simulators were restarted for a clean focused rerun. Both restarted focused quality suites passed (six methods per runtime), followed by final complete suites of 219 pass / 12 optional skips / zero failures per runtime. Their production executable hashes match the final built app.
+An early mip assertion read the wrong level through simulator `getBytes(mipmapLevel:)`. Level-zero texture-view reads and a separate GPU copy agreed on correct mip data. A temporary compute generator was therefore reverted. Early rounded P3 coefficient/half-float tolerances were corrected to a D65 matrix and a precision-scaled tolerance. Failed logs are retained and excluded from final pass counts. A final repeated native launch stalled in the simulator's dyld system loader before app code started; its sample was retained, the attempt was cancelled and the owned lab simulators were restarted for a clean focused rerun. The restarted focused quality suites passed. The subsequent final complete suites include the added Main10 ramp: 220 pass / 12 optional skips / zero failures per runtime (232 methods). The pre-main loader failures are not attributed to application rendering code.
 
 ## Reproduction
 
@@ -127,4 +130,4 @@ python3 Scripts/run_scene_checks.py --runtime 26.0 \
   --soak-seconds 120 --output TestResults/quality-scenes
 ```
 
-Use `--only-testing VisionStreamTests/VideoQualityNativeTests` for the six focused native quality methods. The drivers restrict fixture origins to HTTPS loopback, trust the temporary certificate only in disposable lab simulators and never change the Mac trust store or personal simulator sessions. Optional external/private-media tests are skipped unless explicitly enabled. Device/Quest acceptance steps are in [VIDEO_QUALITY_AUDIT.md](VIDEO_QUALITY_AUDIT.md).
+Use `--only-testing VisionStreamTests/VideoQualityNativeTests` for the seven focused native quality methods. The drivers restrict fixture origins to HTTPS loopback, trust the temporary certificate only in disposable lab simulators and never change the Mac trust store or personal simulator sessions. Optional external/private-media tests are skipped unless explicitly enabled. Device/Quest acceptance steps are in [VIDEO_QUALITY_AUDIT.md](VIDEO_QUALITY_AUDIT.md).

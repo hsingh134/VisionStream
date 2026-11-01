@@ -148,6 +148,9 @@ final class ImmersiveRenderer: NSObject {
             lastImageMode = nil; performance = .init(); gpuSum = 0; gpuSamples = 0; lastPublish = -.infinity
             video.isEnabled = false
         }
+        // Flush the most recent frame/metrics at most once a second, including
+        // after pause when no new GPU completion would otherwise publish them.
+        publishDiagnostics()
         guard !processing else { performance.backpressureSkips += 1; return }
         let time = output.itemTime(forHostTime: link.targetTimestamp)
         let meshChanged = lastProjection != playback.projection || lastFlatScreen != playback.flatScreen
@@ -172,6 +175,10 @@ final class ImmersiveRenderer: NSObject {
             do { try await self.upload(buffer, time: self.frameTime, output: output, token: currentToken) }
             catch {
                 guard self.token == currentToken else { return }
+                // Preserve unsupported-frame evidence without publishing normal
+                // frame metadata to SwiftUI at video cadence. Successful frames
+                // publish through the throttled completion path below.
+                self.playback.observedDecodedFrame(VideoPipelineInspection.frame(buffer, time: self.frameTime))
                 self.playback.fail("This decoded frame’s colour format or size is unsupported. Check Playback details or try an SDR source.")
             }
         }
@@ -182,7 +189,6 @@ final class ImmersiveRenderer: NSObject {
         let started = ProcessInfo.processInfo.systemUptime
         let width = CVPixelBufferGetWidth(buffer), height = CVPixelBufferGetHeight(buffer)
         let inspected = VideoPipelineInspection.frame(buffer, time: time)
-        playback.observedDecodedFrame(inspected)
         guard CVPixelBufferGetPixelFormatType(buffer) == kCVPixelFormatType_64RGBAHalf, let cache else { throw RendererError.unsupportedSize }
         var colorMode = try VideoPipelineInspection.colorMode(inspected)
         if colorMode == 2, ["SMPTE_ST_2084_PQ", "ITU_R_2100_HLG"].contains(playback.videoPipeline.source.transferFunction ?? "") {

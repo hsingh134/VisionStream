@@ -325,7 +325,7 @@ import Darwin
         guard let actions=imageActions else { throw Failure.check("image-actions-not-mounted") }
         let p=app.playback
         try require(p.decodedWidth==4096 && p.decodedHeight==2048 && p.presentation == .vr180 && p.layout == .sideBySide,"quality-chart-original-dimensions-and-auto-format")
-        p.pause();try await Task.sleep(for:.milliseconds(300))
+        p.pause();try await Task.sleep(for:.milliseconds(1300)) // Allow the 1 Hz snapshot to settle on the retained paused buffer.
         let output=p.videoOutput,pose=rendererPose?()
         let pts=p.videoPipeline.frame?.presentationSeconds
         actions.panel(true);try await wait("picture-panel-mounted") { mounted(.imageQuality) }

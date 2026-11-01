@@ -93,6 +93,28 @@ import XCTest
             print("QUALITY_HDR_"+name+" "+String(decoding:try JSONEncoder().encode(values),as:UTF8.self))
         }
     }
+    func testActualMain10DecodeRetainsMoreThanEightBitGradientLevels() async throws {
+        let p=PlaybackModel();p.player.isMuted=true;defer { p.stop() }
+        let ready=await p.prepare(.init(id:"main10-ramp",source:try origin()+"/quality/709-main10-ramp.mp4"),cookies:[])
+        XCTAssertTrue(ready,p.errorMessage ?? "Not ready");guard ready else { return }
+        p.play();let b=try await buffer(p)
+        XCTAssertEqual(CVPixelBufferGetWidth(b),1024);XCTAssertEqual(CVPixelBufferGetHeight(b),128)
+        XCTAssertEqual(CVPixelBufferGetPixelFormatType(b),kCVPixelFormatType_64RGBAHalf)
+        XCTAssertEqual(VideoPipelineInspection.frame(b,time:nil).transferFunction,"Linear")
+        CVPixelBufferLockBaseAddress(b,.readOnly);defer { CVPixelBufferUnlockBaseAddress(b,.readOnly) }
+        let ptr=try XCTUnwrap(CVPixelBufferGetBaseAddress(b)).assumingMemoryBound(to:UInt16.self)
+        let row=64*CVPixelBufferGetBytesPerRow(b)/2
+        let bits=(0..<1024).map { ptr[row+$0*4] },values=bits.map { Float(Float16(bitPattern:$0)) }
+        XCTAssertTrue(values.allSatisfy(\.isFinite))
+        XCTAssertLessThan(values[0],0.005);XCTAssertGreaterThan(values[1023],0.98)
+        // Gray input has constant neutral chroma. >700 distinct red levels at
+        // native dimensions excludes an ordinary 256-level RGB bottleneck.
+        XCTAssertGreaterThan(Set(bits).count,700)
+        for (a,b) in zip(values,values.dropFirst()) { XCTAssertLessThanOrEqual(a,b+0.001,"No large gradient reversals") }
+        try await wait { p.videoPipeline.source.bitsPerComponent != nil }
+        XCTAssertEqual(p.videoPipeline.source.bitsPerComponent,10)
+        print("QUALITY_NATIVE_MAIN10_RAMP distinctRedLevels=\(Set(bits).count) sourceSteps=1024 outputFormat=RGBAHalf")
+    }
     func testPictureModesReusePausedFrameAndBindActualSampler() async throws {
         #if targetEnvironment(simulator)
         let playback=PlaybackModel();playback.player.isMuted=true

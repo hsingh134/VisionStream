@@ -37,6 +37,8 @@ The old cap **did not reduce standard 8192 × 4096 side-by-side VR180**: each ey
 
 ## Corrected colour and texture path
 
+An actual lossless Main10 neutral ramp additionally verifies decoder/output gradation: both simulator runtimes retain **all 1,024 distinct source steps** in the half-float red channel at native dimensions. This complements the GPU-only precision benchmark; it does not expose or certify every internal AVFoundation stage or other source codec.
+
 `AVPlayer → actual RGBA16F buffer + colour attachments → CVMetalTextureCache → linear eye crop/gamut conversion/optional enhancement → RGBA16F eye texture(s) → explicit material sampler → unlit RealityKit surface → system compositor`.
 
 No extra full-frame CPU copy, application encode pass, sharpening upscale or custom decoder was added. Sparse image-layout analysis samples a bounded 128 × 64 luminance grid; it does not copy the full frame. The GPU input IOSurface and Core Video texture remain leased until command completion, including during teardown.
@@ -69,7 +71,7 @@ While playing, reveal the controls and choose **Picture**:
 - **A/B**: switch Original ↔ the last selected non-Original mode. Pause first to compare the same decoded frame and viewpoint; changing the mode does not replace the player item or seek.
 - **Pipeline diagnostics**: independent overlay; it can remain visible while transport controls hide. Turn it off from Picture.
 
-The current Playback details JSON includes `videoPipeline`: source track properties, coded precision evidence, actual buffer dimensions/format/colour/stride/PTS, eye sizes/descriptor bytes/scale, filtering requests, projection/mesh, estimated source/texture angular resolution, and scoped performance measurements. Session history includes compact bounded samples and picture-mode changes. Existing diagnostic privacy/full-link preferences and retention rules remain in force; no frame images or head-pose history are saved.
+The current Playback details JSON includes `videoPipeline`: source track properties, coded precision evidence, actual buffer dimensions/format/colour/stride/PTS, eye sizes/descriptor bytes/scale, filtering requests, projection/mesh, estimated source/texture angular resolution, and scoped performance measurements. Normal pipeline snapshots publish at most once per second, including after pause; picture-mode changes and failures publish immediately. Frame acquisition itself does not trigger a diagnostic SwiftUI update on every video frame. Session history includes compact bounded samples and picture-mode changes. Existing diagnostic privacy/full-link preferences and retention rules remain in force; no frame images or head-pose history are saved.
 
 Measured: copied-buffer dimensions/format, public track metadata, descriptor sizes, counters, own-process CPU/footprint/thermal state, display-link callback intervals, command GPU elapsed time where nonzero, CPU preparation wall time and submit-to-callback latency. GPU timing covers preparation only. PTS gaps, access-log dropped frames and backpressure skips are distinct; no inferred “total dropped frames” is invented.
 

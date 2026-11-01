@@ -94,6 +94,17 @@ def main():
         target=OUT/'vr360-mono-8k.mp4'
         run(['-f','lavfi','-i','testsrc2=size=8192x4096:rate=30:duration=0.6','-an','-vf','setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=limited','-c:v','libx265','-preset','ultrafast','-crf','18','-x265-params','pools=2:frame-threads=1:log-level=error','-pix_fmt','yuv420p10le','-tag:v','hvc1','-color_primaries','bt709','-color_trc','bt709','-colorspace','bt709','-color_range','tv','-movflags','+faststart+write_colr',str(target)])
         manifest.append({'file':target.name,'probe':metadata(target)})
+        # Full-range Main10 neutral ramp: a native decode test can count actual
+        # distinct levels, rather than infer precision from a float pixel format.
+        ramp=tmp/'ramp.yuv'
+        data=array.array('H',list(range(1024))*128+[512]*(1024*128//2))
+        if __import__('sys').byteorder!='little':data.byteswap()
+        ramp.write_bytes(data.tobytes());target=OUT/'709-main10-ramp.mp4'
+        run(['-stream_loop','-1','-f','rawvideo','-pix_fmt','yuv420p10le','-s','1024x128','-r','30','-i',str(ramp),'-t','2','-an',
+             '-vf','setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=full',
+             '-c:v','libx265','-preset','fast','-x265-params','lossless=1:pools=1:frame-threads=1:log-level=error','-tag:v','hvc1',
+             '-color_primaries','bt709','-color_trc','bt709','-colorspace','bt709','-color_range','pc','-movflags','+faststart+write_colr',str(target)])
+        manifest.append({'file':target.name,'reference':{'lumaCodes':'0 through 1023 inclusive, neutral full-range Main10'},'probe':metadata(target)})
     (OUT/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
     (OUT/'LICENSE.txt').write_text('Original VisionStream test patterns, released under CC0 1.0 Universal.\nhttps://creativecommons.org/publicdomain/zero/1.0/\n')
     (ROOT/'Fixtures/generated/quality-audit.html').write_text('<!doctype html><title>Original CC0 quality chart</title><video controls autoplay muted playsinline loop data-projection="vr180" data-stereo="sbs" preload="metadata" src="quality/vr180-sbs-chart.mp4" style="width:95%"></video><p>Original CC0 resolution, text, gradients and stereo alignment chart. VR180 side by side.</p>')
