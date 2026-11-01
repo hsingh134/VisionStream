@@ -1,4 +1,9 @@
-# Current additions — 0.6.0
+# Automated testing
+
+## Playlist responses (0.14.2)
+
+The playback-recovery native suite tests actual foreground playlist responses for 403, 404, a blocked 302 redirect and HTTP 200 with a non-playlist body. It checks the snapshot's exact status/outcome with detailed recording off, distinguishes foreground transport, excludes private test queries/paths and verifies a subsequent MP4 clears the old summary. Existing retained-master cookie coverage also checks a successful parsed HTTP 200. These do not identify which response the unavailable live CDN returned, and a foreground check does not prove AVPlayer made an equivalent request.
+
 
 ## Hidden controls and playback recovery (0.14.0)
 

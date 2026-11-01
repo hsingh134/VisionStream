@@ -16,9 +16,14 @@ import XCTest
     func testHandoffUsesLatestSourceFromSameDetectedElement() async throws {
         let origin = try XCTUnwrap(ProcessInfo.processInfo.environment["VISIONSTREAM_TEST_ORIGIN"].flatMap(URL.init(string:)))
         let browser = BrowserModel()
-        defer { browser.closeTab() }
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = try XCTUnwrap(scene.windows.first { !$0.isHidden })
+        browser.webView.frame = window.bounds; window.addSubview(browser.webView)
+        defer { browser.webView.removeFromSuperview(); browser.closeTab() }
         browser.open(origin.appendingPathComponent("automation-mp4"))
-        var end = Date().addingTimeInterval(15)
+        // A new simulator's first WebKit process can take over 15 seconds.
+        // Keep navigation bounded and exercise an attached view, as production does.
+        var end = Date().addingTimeInterval(25)
         while browser.candidates.isEmpty, Date() < end { try await Task.sleep(for: .milliseconds(50)) }
         let old = try XCTUnwrap(browser.candidates.first)
         let replacement = origin.appendingPathComponent("vr360-mono.mp4").absoluteString
@@ -40,6 +45,8 @@ import XCTest
         XCTAssertTrue(ready, "A legitimate cookie from quality inspection must reach native HLS requests")
         guard ready else { return }
         XCTAssertTrue(playback.qualityStatus.contains("Adaptive"))
+        XCTAssertEqual(playback.manifestInspection?.httpStatus, 200)
+        XCTAssertEqual(playback.manifestInspection?.outcome, .parsed)
         playback.play()
         let end = Date().addingTimeInterval(8)
         while playback.player.currentTime().seconds < 0.2, Date() < end { try await Task.sleep(for: .milliseconds(50)) }
@@ -82,8 +89,10 @@ import XCTest
         browser.webView.frame = window.bounds; window.addSubview(browser.webView)
         defer { browser.webView.removeFromSuperview(); browser.closeTab(); playback.stop() }
         browser.open(origin.appendingPathComponent("web-playback-test"))
-        var end = Date().addingTimeInterval(15)
+        var end = Date().addingTimeInterval(25)
         while browser.isLoading || browser.candidates.isEmpty, Date() < end { try await Task.sleep(for: .milliseconds(50)) }
+        _ = try XCTUnwrap(browser.candidates.first,
+            "Fixture video did not mount: page status \(String(describing: browser.pageHTTPStatus)), loading \(browser.isLoading), codes \(browser.pageFailureCodes)")
         let started = try await browser.webView.callAsyncJavaScript("await document.querySelector('video').play();return true", in: nil, contentWorld: .page) as? Bool
         XCTAssertEqual(started, true)
         let before = try await browser.webView.evaluateJavaScript("document.querySelector('video').currentTime") as? Double ?? 0
@@ -105,6 +114,34 @@ import XCTest
             if !advanced { try await Task.sleep(for: .milliseconds(50)) }
         }
         XCTAssertTrue(advanced, "The webpage can continue without refreshing after native playback failed")
+    }
+    func testPlaylistInspectionReportsExactResponseWithHistoryOffAndClearsOnNextAttempt() async throws {
+        let origin = try XCTUnwrap(ProcessInfo.processInfo.environment["VISIONSTREAM_TEST_ORIGIN"].flatMap(URL.init(string:)))
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let history = SessionDiagnostics(root: root)
+        history.setEnabled(false)
+        let app = AppModel(history: history)
+        defer { app.playback.stop(); app.tabs.pages.forEach { $0.closeTab() }; try? FileManager.default.removeItem(at: root) }
+        for (path, status, outcome) in [("library/forbidden", 403, "requestFailed"),
+            ("missing-inspection.m3u8", 404, "requestFailed"),
+            ("resource-trace/redirect.m3u8", 302, "requestFailed"),
+            ("download-invalid-mp4.mp4", 200, "invalidManifest")] {
+            let url = origin.appendingPathComponent(path).appending(queryItems: [.init(name: "private", value: "not-in-report")])
+            _ = await app.playback.prepare(.init(id: "inspection", source: url.absoluteString, mimeType: "application/vnd.apple.mpegurl"), cookies: [])
+            XCTAssertEqual(app.playback.manifestInspection?.httpStatus, status, path)
+            XCTAssertEqual(app.playback.manifestInspection?.outcome.rawValue, outcome, path)
+            let report = app.playbackReport
+            let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: Data(report.utf8)) as? [String: Any])
+            let inspection = try XCTUnwrap(object["manifestInspection"] as? [String: Any])
+            XCTAssertEqual(inspection["httpStatus"] as? Int, status)
+            XCTAssertEqual(inspection["transport"] as? String, "foregroundURLSession")
+            XCTAssertFalse(report.contains("not-in-report")); XCTAssertFalse(report.contains(path))
+            XCTAssertFalse(report.contains(origin.absoluteString))
+        }
+        let ready = await app.playback.prepare(.init(id: "clean", source: origin.appendingPathComponent("vr180-sbs.mp4").absoluteString), cookies: [])
+        XCTAssertTrue(ready); XCTAssertNil(app.playback.manifestInspection, "A later MP4 must not inherit the earlier playlist's HTTP status")
+        app.playback.stop(); app.playback.resetDiagnosticsWhenIdle()
+        XCTAssertNil(app.playback.manifestInspection)
     }
     func testControlsTimerKeepsInteractionAndPausedVideoVisible() {
         let controls = ImmersiveControlsModel()

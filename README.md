@@ -2,7 +2,7 @@
 
 A native web browser and immersive video player for Apple Vision Pro. Browse a website, start a compatible video and open it in a native Screen, VR180 or VR360 viewer.
 
-**Current version: 0.14.1 · Early source release · visionOS 26+**
+**Current version: 0.14.2 · Early source release · visionOS 26+**
 
 VisionStream has automated simulator coverage on visionOS 26 and 27 and has been installed on a physical Vision Pro. Physical-headset playback, comfort and broad website compatibility still need testing. It is not currently available through the App Store or TestFlight.
 

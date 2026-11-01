@@ -1,5 +1,18 @@
 # Verification record
 
+## HLS inspection response evidence 0.14.2 (1 November 2026)
+
+User-supplied physical-headset 0.14.1 history contains five native HLS failures before decoded frames, each following a foreground manifest-inspection `NSURLErrorDomain:-1011`. Native loading then reports `NSURLErrorDomain:-1008` with `CoreMediaErrorDomain:-16845`. The webpage media clock advances at 1440 × 720 with ready/unpaused/error-free state. Refresh changes the media reference, but subsequent attempts still fail. No exact HTTP status or specific failing dependency was exposed. This does not establish an unsupported codec, login problem or expired URL. The first supplied snapshot still had recording off; the later file contains 106 recorded events.
+
+Version 0.14.2 preserves the already-observed foreground playlist HTTP status, complete-body inspection size, parsed/invalid/request-failed outcome, variant count and sanitized failure codes in both the requested snapshot and opt-in history. It explicitly labels foreground transport and does not overwrite native `mediaHTTPStatus`. The snapshot works with history off; privacy choices remain intact. This is a diagnostic correction, not a verified live streaming repair.
+
+Final focused native suites: **11 pass on each of visionOS 26 and 27**, zero failures/skips. Tests cover 403, 404, blocked redirect 302 and a 200 non-playlist response, a successful parsed 200, report redaction with history off, clearing stale status, highest-quality HLS, existing handoff/controls/teardown and privacy checks. Core suite: **99 pass**. Full native/scene suites were not rerun for this diagnostic-only patch; 0.14.0 results remain below.
+
+Signed **0.14.2 (37)** is verified installed on the physical headset without launching its retained private page. Existing recording preferences and stored history are preserved.
+
+Early grouped runs failed two existing webpage fixture checks. An isolated recheck passes; the fixture tests now attach the WebKit view and allow up to 25 seconds for cold navigation, checking for a video before issuing JavaScript. Final grouped runs pass. These failures remain in local evidence and do not diagnose the physical website failure. Private evidence: `TestResults/manifest-response-0.14.2/matrix.json` and `user-report-assessment.json`.
+
+
 ## Playback notice clarification 0.14.1 (1 November 2026)
 
 The browser now labels native errors **VisionStream playback** and provides a dismiss action that preserves failure stage, numeric codes, attempted candidate and reason. Native failure evidence previously remained on the same page until another native attempt or navigation, which could make refresh appear necessary to clear an old warning. This identifies a UI ambiguity; it does not diagnose the user's intermittent live Pornhub transport or codec failure.

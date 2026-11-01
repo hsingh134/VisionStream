@@ -116,6 +116,7 @@ final class AppModel {
         object["queuedSaveCount"]=queuedSaves.count
         object["openTabCount"]=tabs.pages.count
         object["preparationRetryCount"]=playback.preparationRetryCount
+        object["manifestInspection"] = playback.manifestInspection.flatMap { try? JSONSerialization.jsonObject(with:encoder.encode($0)) } ?? NSNull()
         object["queuedSaveAttempts"]=queuedSaves.compactMap { $0.context.flatMap { try? JSONSerialization.jsonObject(with:encoder.encode($0.sanitized())) } }
         object["downloadJobs"]=(try? JSONSerialization.jsonObject(with:encoder.encode(jobs))) ?? []
         object["playbackAttempt"] = playback.diagnosticContext.flatMap { try? JSONSerialization.jsonObject(with:encoder.encode($0)) } ?? NSNull()

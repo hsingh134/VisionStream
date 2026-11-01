@@ -69,6 +69,9 @@ public enum PlaybackDiagnostics {
         if codes.contains("NSURLErrorDomain:\(NSURLErrorSecureConnectionFailed)") || (-1206 ... -1201).contains(where: { codes.contains("NSURLErrorDomain:\($0)") }) {
             return "A secure connection to the media server could not be established. Try the website again later or check your connection. This error does not identify a codec or login problem."
         }
+        if codes.contains("NSURLErrorDomain:\(NSURLErrorResourceUnavailable)") {
+            return "Native playback reported an unavailable media resource. A failed request or unreadable media can cause this; it does not confirm a missing codec. Playback details includes any separate playlist-check result."
+        }
         if codes.contains("NSURLErrorDomain:\(NSURLErrorFileDoesNotExist)") {
             return "A playlist or media resource was reported as missing. Run Find streams again for fresh links, then try MP4 or HLS Automatic quality if available. This error alone does not prove that the link expired or identify an HTTP status."
         }

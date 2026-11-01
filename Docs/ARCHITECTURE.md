@@ -1,5 +1,10 @@
 # Technical architecture
 
+## Playlist inspection evidence (0.14.2)
+
+The current playback snapshot includes `manifestInspection` after a Highest-quality foreground HLS check. It contains a fixed outcome (`parsed`, `invalidManifest` or `requestFailed`), the observed HTTP status/declared response length when available, the complete body bytes returned to inspection (zero if none was returned), variant count and sanitized numeric failure codes. `transport: foregroundURLSession` distinguishes this check from AVPlayer's requests. `mediaHTTPStatus` continues to mean status actually exposed by the native media service; a foreground status never overwrites it. No response content, URL path/query, header or credential values enter the summary. The summary is kept in memory even with history off, included only when a report is requested, preserved after failure/dismissal, and reset on a new preparation or idle diagnostic reset. With recording on, the same bounded metadata is added to the attempt's history.
+
+
 ## Controls and first-attempt recovery (0.14.0)
 
 `ImmersiveControlsModel` tracks a monotonic five-second inactivity deadline. Pause, buffering, seeking, recentering and expanded settings keep the attachment visible. A separate inward-facing static collision mesh at six metres surrounds the viewer and accepts system indirect input. A targeted tap toggles visibility; the SwiftUI attachment remains nearer, so its own buttons receive input. Each reveal captures current head orientation, places the panel 0.35 metres below the facing line at 1.6 metres, and preserves the video orientation. The panel stays in place while visible. No gaze samples or pose history are stored. Stream failure releases displayed materials/textures while leaving tracking and the tap surface available for exit. In-flight frame leases are retained by the renderer until GPU completion and released on the main actor; completion retains the cache owner through teardown.

@@ -1,5 +1,12 @@
 # Public-preview selection — 25 October 2026, VisionStream 0.6.1
 
+## Physical-headset HLS failure history (1 November 2026)
+
+The user's 0.14.1 reports show five failed native attempts over three media references from the same page, including page refreshes. All foreground manifest checks fail with -1011 before the native asset load reports -1008 / CoreMedia -16845. The main webpage video reports ready/unpaused at 1440 × 720, with advancing media clocks and no media error. There are no native decoded frames or recorded selected higher rendition. The exact HTTP status is absent, so access rejection, redirect/response validation and malformed media cannot be distinguished. Zero scoped CDN cookies are recorded; that alone does not establish missing authentication. No new agent-controlled site requests, logins or downloads were performed.
+
+Version 0.14.2 exposes the existing foreground check's status/outcome in requested reports and optional history. It is a diagnostic improvement; these reports do not show the live failure fixed.
+
+
 ## Session diagnostics and HLS follow-up — 0.7.0
 
 A user-supplied 0.6.2 report shows Automatic on, VR180/SBS, decoded HLS at 1440 × 720, Highest selected at the same dimensions and no native playback error. Its download failure is CoreMedia -12938 with no HTTP result. In 0.6.2, the latest failed HLS job could be mixed with unrelated playback. Version 0.7.0 separates and correlates those attempts and records native transport/variant details when available. This error alone does not establish a missing URL, authentication, codec or server cause.

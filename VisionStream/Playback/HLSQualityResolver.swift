@@ -1,5 +1,18 @@
 import Foundation
 
+/// A snapshot of our foreground inspection, not AVPlayer's network traffic.
+/// Fixed classifications and numeric response metadata only; no URL or content.
+struct HLSInspectionSummary: Encodable, Sendable {
+    enum Outcome: String, Encodable { case parsed, invalidManifest, requestFailed }
+    let transport = "foregroundURLSession"
+    let outcome: Outcome
+    let httpStatus: Int?
+    let expectedBytes: Int64?
+    let receivedBytes: Int
+    let variantCount: Int
+    let failureCodes: [String]
+}
+
 /// A bounded inspection of the exact published master, with no redirects,
 /// credential-store access, playlist rewriting or whole-video download.
 final class HLSQualityRequest: NSObject, URLSessionDataDelegate, @unchecked Sendable {

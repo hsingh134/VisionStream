@@ -36,6 +36,7 @@ final class PlaybackModel {
     private(set) var diagnosticCandidate: MediaCandidate?
     private(set) var browserUserAgentApplied = false
     private(set) var preparationRetryCount = 0
+    private(set) var manifestInspection: HLSInspectionSummary?
     var errorMessage: String?
     var projection: VideoProjection = .vr180 { didSet { if projection != oldValue { trace(.format, action: "projection-changed") } } }
     var layout: StereoLayout = .mono { didSet { if layout != oldValue { trace(.format, action: "layout-changed") } } }
@@ -149,6 +150,7 @@ final class PlaybackModel {
         failureReason = .none; itemStatusAtFailure = .notCreated; errorLogCodes = []
         browserUserAgentApplied = false
         preparationRetryCount = 0
+        manifestInspection = nil
         decodedWidth = 0; decodedHeight = 0
         guard let url = URL(string: candidate.source), ownedLocalFile ? url.isFileURL : candidate.compatibility == .candidate else {
             diagnosticStage = "unsupported-candidate"
@@ -192,10 +194,24 @@ final class PlaybackModel {
                 if let userAgent, userAgent.utf8.count <= 1024, userAgent.rangeOfCharacter(from: .controlCharacters) == nil { request.setValue(userAgent, forHTTPHeaderField: "User-Agent") }
                 let probe = HLSQualityRequest(); qualityRequest = probe
                 let data: Data?
+                var inspectionCodes: [String] = []
                 do { data=try await probe.load(request) }
-                catch { data=nil; diagnostics?.record(.quality,context:diagnosticContext,labels:["phase":"manifest-inspection-failed"],codes:PlaybackDiagnostics.failure(error)) }
+                catch {
+                    data=nil; inspectionCodes=PlaybackDiagnostics.failure(error)
+                    diagnostics?.record(.quality,context:diagnosticContext,labels:["phase":"manifest-inspection-failed"],codes:inspectionCodes)
+                }
                 guard generation == token, !Task.isCancelled else { return false }
                 let inspected=data.flatMap { try? HLSManifest(data:$0,base:url) }
+                let response = probe.responseSummary
+                let outcome: HLSInspectionSummary.Outcome = data == nil ? .requestFailed : (inspected == nil ? .invalidManifest : .parsed)
+                manifestInspection = HLSInspectionSummary(outcome: outcome, httpStatus: response?.status,
+                    expectedBytes: response?.expectedBytes, receivedBytes: data?.count ?? 0,
+                    variantCount: inspected?.variants.count ?? 0, failureCodes: inspectionCodes)
+                var responseNumbers: [String: Double] = ["receivedBytes":Double(data?.count ?? 0), "variantCount":Double(inspected?.variants.count ?? 0)]
+                if let response { responseNumbers["httpStatus"]=Double(response.status); responseNumbers["expectedBytes"]=Double(response.expectedBytes) }
+                diagnostics?.record(.quality,context:diagnosticContext,
+                    labels:["phase":"manifest-inspection-result","status":outcome.rawValue,"requestMode":"foreground-playlist"],
+                    numbers:responseNumbers,codes:inspectionCodes)
                 if let inspected {
                     for variant in inspected.variants {
                         var available=diagnosticContext
@@ -569,6 +585,7 @@ final class PlaybackModel {
         diagnosticCandidate = nil
         browserUserAgentApplied = false
         preparationRetryCount = 0
+        manifestInspection = nil
         decodedWidth = 0; decodedHeight = 0
     }
 
