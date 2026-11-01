@@ -233,6 +233,7 @@ import SwiftUI
                 Text("Video tools can find more sources or save supported videos. Downloads lets you watch saved videos offline. Website VR/motion setup affects only the website’s player.").foregroundStyle(.secondary)
                 Text("Automatic opening can be turned off in Browser settings. Autoplay previews do not trigger it. If a website’s Play control is not recognised, choose Watch in VR when the video bar appears; Find video sources and Playback details are always in Browser options.").font(.callout).foregroundStyle(.secondary)
                 Text("Recenter gives you three seconds to look where the video should face, including while lying down. Position lets you adjust tilt or reset the video upright.").font(.callout).foregroundStyle(.secondary)
+                Text("Playback controls hide after five seconds while video plays. Tap the video once to show them just below where you are facing, or use Hide controls. They stay visible while paused, scrubbing or changing settings.").font(.callout).foregroundStyle(.secondary)
                 Text("Some websites require their own player or login and cannot hand a video to VisionStream.").font(.callout).foregroundStyle(.secondary)
                 Button("Got it") { showHelp = false }.buttonStyle(.borderedProminent)
             }.padding(30).frame(width: 620)
@@ -414,17 +415,26 @@ import SwiftUI
         preparingTask = Task { @MainActor in
             defer { app.playback.openingImmersive = false }
             let ready: Bool
+            var requestedMedia = media
             if let saved {
                 ready = await app.playback.prepareSavedVideo(saved, store: app.downloads.store)
             } else if let savedHLS {
                 ready = await app.playback.prepareSavedHLS(savedHLS, store: app.hlsDownloads.store)
             } else {
-                guard let url = URL(string: media.source) else { return }
-                let cookies = await sourceBrowser.cookies(for: url)
+                requestedMedia = sourceBrowser.freshCandidate(for: media)
+                guard let url = URL(string: requestedMedia.source) else { return }
+                var cookies = await sourceBrowser.cookies(for: url)
                 guard !Task.isCancelled, operation == token, app.browser === sourceBrowser, sourceBrowser.navigationVersion == navigationVersion else { return }
                 let userAgent = await sourceBrowser.playbackUserAgent()
                 guard !Task.isCancelled, operation == token, app.browser === sourceBrowser, sourceBrowser.navigationVersion == navigationVersion else { return }
-                ready = await app.playback.prepare(media, cookies: cookies, userAgent: userAgent, cookieProvider: { [weak sourceBrowser] url in await sourceBrowser?.cookies(for: url) ?? [] })
+                let latest = sourceBrowser.freshCandidate(for: requestedMedia)
+                if latest.source != requestedMedia.source, let updatedURL = URL(string: latest.source) {
+                    requestedMedia = latest
+                    cookies = await sourceBrowser.cookies(for: updatedURL)
+                    guard !Task.isCancelled, operation == token, app.browser === sourceBrowser, sourceBrowser.navigationVersion == navigationVersion else { return }
+                    app.history.record(.playback, context: sourceBrowser.diagnosticContext, labels: ["phase": "refresh-detected-source-before-handoff"])
+                }
+                ready = await app.playback.prepare(requestedMedia, cookies: cookies, userAgent: userAgent, cookieProvider: { [weak sourceBrowser] url in await sourceBrowser?.cookies(for: url) ?? [] })
             }
             guard ready, !Task.isCancelled, operation == token else { return }
             guard app.browser === sourceBrowser, sourceBrowser.navigationVersion == navigationVersion else { app.playback.stop(); return }
@@ -441,7 +451,7 @@ import SwiftUI
             case .opened:
                 // Keep an exit control available even if the website is slow to pause.
                 // A refused/cancelled system transition must not pause the page.
-                await sourceBrowser.pausePageVideo(media)
+                await sourceBrowser.pausePageVideo(requestedMedia)
                 guard !Task.isCancelled, operation == token,
                       app.browser === sourceBrowser, sourceBrowser.navigationVersion == navigationVersion, app.playback.isReady else {
                     await dismissImmersiveSpace(); return

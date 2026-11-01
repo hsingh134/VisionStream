@@ -10,6 +10,7 @@ import UIKit
 final class ImmersiveRenderer: NSObject {
     let video = ModelEntity()
     let controls: Entity
+    let inputSurface = Entity()
     private let playback: PlaybackModel
     private let device: any MTLDevice
     private let queue: any MTLCommandQueue
@@ -25,11 +26,13 @@ final class ImmersiveRenderer: NSObject {
     private var running = false
     private var token = UUID()
     private var pendingFrames = 0
+    private var frameLeases: [UUID: FrameLease] = [:]
     private let session = ARKitSession()
     private let tracking = WorldTrackingProvider()
     private var trackingStarted = false
     private var didCenter = false
     private var lastRecenter = -1
+    private var lastControlsPlacement = -1
     private var viewingPose = ViewingPose()
     private var lastProjection: VideoProjection?
     private var lastFlatScreen: Bool?
@@ -62,6 +65,14 @@ final class ImmersiveRenderer: NSObject {
         loaded.faceCulling = .none
         material = loaded
         try rebuildMesh()
+        // A hollow inward-facing mesh is hittable from inside the panorama.
+        // Keep it behind the attachment so it cannot steal taps on its buttons.
+        let inputMesh = ProjectionMesh.generate(projection: .vr360, columns: 32, rows: 16, radius: 6)
+        let shape = try await ShapeResource.generateStaticMesh(positions: inputMesh.positions, faceIndices: inputMesh.indices.map(UInt16.init))
+        guard token == currentToken, !Task.isCancelled else { return }
+        inputSurface.name = "Show or hide playback controls"
+        inputSurface.components.set(CollisionComponent(shapes: [shape], mode: .trigger))
+        inputSurface.components.set(InputTargetComponent(allowedInputTypes: .indirect))
         if WorldTrackingProvider.isSupported {
             try await session.run([tracking])
             guard token == currentToken, !Task.isCancelled else { session.stop(); return }
@@ -82,7 +93,12 @@ final class ImmersiveRenderer: NSObject {
         running = false; token = UUID()
         displayLink?.invalidate(); displayLink = nil; displayTarget = nil
         session.stop(); trackingStarted = false
+        releaseVideoResources()
+    }
+
+    private func releaseVideoResources() {
         video.isEnabled = false
+        guard video.model != nil || lastPixelBuffer != nil || left != nil || right != nil || material != nil else { return }
         video.model = nil
         lastPixelBuffer = nil; left = nil; right = nil; material = nil
         if let cache { CVMetalTextureCacheFlush(cache, 0) }
@@ -90,8 +106,17 @@ final class ImmersiveRenderer: NSObject {
 
     fileprivate func tick(_ link: CADisplayLink) {
         guard running else { return }
-        guard playback.isReady else { if !playback.isPreparing { stop() }; return }
+        // Keep the tap surface and tracking alive if streaming fails, so an
+        // error can reveal usable exit controls rather than strand the viewer.
         updatePose()
+        playback.controls.tick(playing: playback.isPlaying,
+            attention: playback.errorMessage != nil || playback.isBuffering || playback.isSeeking || playback.recenterCountdown != nil)
+        if controls.isEnabled != playback.controls.isVisible { controls.isEnabled = playback.controls.isVisible }
+        guard playback.isReady else {
+            if !playback.isPreparing { releaseVideoResources() }
+            else { video.isEnabled = false }
+            return
+        }
         guard !processing, let output = playback.videoOutput else { return }
         let time = output.itemTime(forHostTime: link.targetTimestamp)
         let meshChanged = lastProjection != playback.projection || lastFlatScreen != playback.flatScreen
@@ -167,12 +192,15 @@ final class ImmersiveRenderer: NSObject {
         encoder.dispatchThreads(MTLSize(width: size.x, height: size.y, depth: 1), threadsPerThreadgroup: group)
         encoder.endEncoding()
         // Retain the IOSurface and CVMetalTexture until the GPU has finished reading them.
-        let lease = FrameLease(buffer: buffer, texture: cvTexture)
-        command.addCompletedHandler { @Sendable [weak self, lease] command in
-            withExtendedLifetime(lease) {}
+        let leaseID = UUID()
+        frameLeases[leaseID] = FrameLease(buffer: buffer, texture: cvTexture)
+        // Keep this cache owner alive until the command completes. Release
+        // Core Video objects on the same actor as cache creation/flush, even if
+        // the scene was dismissed while GPU work was still in flight.
+        command.addCompletedHandler { @Sendable [self] command in
             let succeeded = command.status == .completed
-            Task { @MainActor [weak self] in
-                guard let self else { return }
+            Task { @MainActor [self] in
+                self.frameLeases.removeValue(forKey: leaseID)
                 self.pendingFrames -= 1
                 guard self.token == currentToken, self.running, self.playback.isReady else { return }
                 if succeeded { self.video.isEnabled = true; self.playback.receivedFrame(width: width, height: height) }
@@ -219,6 +247,7 @@ final class ImmersiveRenderer: NSObject {
 
     func applyPose(_ transform: simd_float4x4) {
         let position = SIMD3<Float>(transform.columns.3.x, transform.columns.3.y, transform.columns.3.z)
+        inputSurface.position = position
         // Panorama is effectively infinitely distant: follow translation, preserve orientation.
         if !playback.flatScreen { video.position = position }
         if !didCenter || lastRecenter != playback.recenterID {
@@ -227,6 +256,12 @@ final class ImmersiveRenderer: NSObject {
             controls.position = viewingPose.controlsPosition(viewer: position)
             controls.orientation = viewingPose.controlsOrientation
             lastRecenter = playback.recenterID; didCenter = true
+        }
+        if lastControlsPlacement != playback.controls.placementID {
+            viewingPose.placeControls(head: transform)
+            controls.position = viewingPose.controlsPosition(viewer: position)
+            controls.orientation = viewingPose.controlsOrientation
+            lastControlsPlacement = playback.controls.placementID
         }
         // Manual tilt rotates the video around its captured local right axis.
         // Controls stay reachable while adjusting it, rather than following the slider.
@@ -237,8 +272,8 @@ final class ImmersiveRenderer: NSObject {
 
 private enum RendererError: Error { case unavailable, unsupportedSize }
 
-// Immutable retention capsule; it never reads or mutates either CF object off the main actor.
-private final class FrameLease: @unchecked Sendable {
+// Owned and released only on the main actor after GPU completion.
+@MainActor private final class FrameLease {
     let buffer: CVPixelBuffer
     let texture: CVMetalTexture
     init(buffer: CVPixelBuffer, texture: CVMetalTexture) { self.buffer = buffer; self.texture = texture }

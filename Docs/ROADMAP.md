@@ -1,10 +1,10 @@
 # Prioritised engineering tasks — 0.6.1
 
-## Usability priorities after 0.13.0
+## Usability priorities after 0.14.0
 
-Implemented: eight in-memory tabs, independent page navigation, suspended background media, active-tab-only VR handoff, pinned favourites, local saved-page search, explicit address/search entry, Back/Forward history menus and Stop loading. Existing bookmarks migrate without being deleted or silently starred.
+Implemented: auto-hiding immersive controls with a single-tap reveal below the current head-facing line, plus eight in-memory tabs, independent page navigation, suspended background media, active-tab-only VR handoff, pinned favourites, local saved-page search, explicit address/search entry, Back/Forward history menus and Stop loading. Existing bookmarks migrate without being deleted or silently starred.
 
-Next priorities: opt-in tab restoration and undo-close with clear retention controls; private browsing using an isolated nonpersistent website store; per-site popup and permission controls; reliable hiding/showing of VR controls; and physical gaze/pinch, large-text, reclining and sustained multi-tab memory/thermal acceptance. These are outstanding work, not shipped features.
+Next priorities: opt-in tab restoration and undo-close with clear retention controls; private browsing using an isolated nonpersistent website store; per-site popup and permission controls; physical gaze/pinch, large-text, reclining and sustained multi-tab memory/thermal acceptance. These are outstanding work, not shipped features.
 
 
 ## 0.9.0 resource tracing and foreground save recovery

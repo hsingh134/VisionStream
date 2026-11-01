@@ -10,15 +10,26 @@ import SwiftUI
         RealityView { content, attachments in
             guard let transport = attachments.entity(for: "transport") else { return }
             app.playback.resetViewingPosition()
+            app.playback.controls.reset()
             transport.position = [0, 1.2, -1.6]
             content.add(transport)
             do {
                 let renderer = try ImmersiveRenderer(playback: app.playback, controls: transport)
                 self.renderer = renderer
                 content.add(renderer.video)
+                content.add(renderer.inputSurface)
                 try await renderer.start()
                 #if targetEnvironment(simulator)
                 if SimulatorScenarioRunner.isConfigured {
+                    SimulatorScenarioRunner.sceneTap = { app.playback.controls.toggle() }
+                    SimulatorScenarioRunner.controlsVisible = { [weak renderer] in renderer?.controls.isEnabled == true }
+                    SimulatorScenarioRunner.inputSurfaceReady = { [weak renderer] in
+                        guard let renderer, let scene = renderer.inputSurface.scene else { return false }
+                        let viewer = renderer.inputSurface.position
+                        return [SIMD3<Float>(0,0,-1), SIMD3<Float>(1,0,0), SIMD3<Float>(0,1,0)].allSatisfy { direction in
+                            scene.raycast(origin: viewer, direction: direction, length: 8).contains { $0.entity === renderer.inputSurface }
+                        }
+                    }
                     SimulatorScenarioRunner.rendererPose = { [weak renderer] in
                         guard let renderer, renderer.video.isEnabled else { return nil }
                         let q = renderer.video.orientation.vector
@@ -39,15 +50,21 @@ import SwiftUI
         } attachments: {
             Attachment(id: "transport") {
                 PlaybackControls(app: app, immersive: true)
+                    .accessibilityHidden(!app.playback.controls.isVisible)
                     .frame(width: 820)
                     .glassBackgroundEffect()
             }
         }
+        .gesture(TapGesture().targetedToAnyEntity().onEnded { value in
+            guard let renderer, value.entity === renderer.inputSurface else { return }
+            app.playback.controls.toggle()
+        })
         .onAppear { app.history.record(.lifecycle,context:app.playback.diagnosticContext,labels:["phase":"immersive-opened"]); app.playback.immersiveActive = true }
         .onDisappear {
             #if targetEnvironment(simulator)
             SimulatorScenarioRunner.rendererBounds = nil
             SimulatorScenarioRunner.rendererPose = nil
+            SimulatorScenarioRunner.sceneTap = nil; SimulatorScenarioRunner.controlsVisible = nil; SimulatorScenarioRunner.inputSurfaceReady = nil
             #endif
             app.history.record(.lifecycle,context:app.playback.diagnosticContext,labels:["phase":"immersive-closed"])
             renderer?.stop(); renderer = nil

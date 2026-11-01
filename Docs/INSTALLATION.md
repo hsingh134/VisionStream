@@ -3,6 +3,10 @@
 Current 0.11.0 release preparation is documented in `Submission/README.md`. Building and simulator tests are free. A free Apple Account can use Xcode Personal Team for personal device testing with seven-day provisioning; App Store/TestFlight distribution requires paid membership. The supplied device archive remains unsigned until you configure your own team. No purchase or enrollment is performed by this project. Keep the `VisionStream` scheme for the existing personal installation; `VisionStream-AppStore` is separate distribution preparation. Public policy/contact and encryption answers are deliberately not invented.
 
 
+## Immersive controls (0.14.0)
+
+During moving playback, the panel hides after five seconds without interaction. Tap the video once (look at the video and pinch on Vision Pro) to show it; tap the video again or choose **Hide controls** to hide it. Each reveal places the panel just below your current head-facing direction without recentering the video. This follows head orientation rather than tracking your eye gaze. The panel remains still while visible and stays visible when paused, buffering or adjusting an expanded setting or seek slider. Physical gaze/pinch delivery and reclining comfort still need acceptance on a headset.
+
 ## Browser tabs and favourites (0.13.0)
 
 Use + to create a tab, select a tab title to switch, and its x to close it. Each tab keeps its own page and Back/Forward stack. Closing the final tab creates a clean Home tab and clears startup restoration. Tabs are not persisted across process restarts; website sessions still share the normal persistent WebKit store. This is not private browsing.

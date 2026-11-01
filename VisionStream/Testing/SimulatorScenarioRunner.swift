@@ -17,7 +17,7 @@ import Darwin
             return from(ProcessInfo.processInfo.environment)
         }
         static func from(_ env: [String: String]) -> Self? {
-            let names: Set<String> = ["tabs", "auto-play", "soak", "saved-state", "downloads", "forms", "quality", "quality4k", "controls", "controls-format", "controls-quality", "mp4", "hls", "library", "library-hls", "cancel", "unsupported", "finder", "reentry", "interrupted"]
+            let names: Set<String> = ["controls-hide", "tabs", "auto-play", "soak", "saved-state", "downloads", "forms", "quality", "quality4k", "controls", "controls-format", "controls-quality", "mp4", "hls", "library", "library-hls", "cancel", "unsupported", "finder", "reentry", "interrupted"]
             guard let name = env["VISIONSTREAM_SCENE_TEST"], names.contains(name),
                   let raw = env["VISIONSTREAM_TEST_ORIGIN"], let url = URL(string: raw),
                   url.scheme == "https", ["127.0.0.1", "localhost"].contains(url.host ?? ""),
@@ -51,6 +51,9 @@ import Darwin
     }
     static var controlActions: ControlActions?
     static var returnAction: (() async -> Void)?
+    static var sceneTap: (() -> Void)?
+    static var controlsVisible: (() -> Bool)?
+    static var inputSurfaceReady: (() -> Bool)?
     static var rendererBounds: (() -> [Double]?)?
     static var rendererPose: (() -> [Double]?)?
     static var openBookmarks: (() -> Void)?
@@ -241,8 +244,11 @@ import Darwin
             if config.name == "interrupted" { return }
             if config.name == "soak" { try await soak(config, app: app) }
             if config.name.hasPrefix("controls") {
-                try await playbackPopovers(config, app: app)
-                if config.name != "controls" { return }
+                if config.name == "controls-hide" { try await hidingControls(app: app) }
+                else {
+                    try await playbackPopovers(config, app: app)
+                    if config.name != "controls" { return }
+                }
             }
             if config.name == "finder" {
                 try await wait("public-spherical-metadata", seconds: 8) { app.playback.presentation == .vr360 && app.playback.layout == .mono }
@@ -312,6 +318,27 @@ import Darwin
         try await wait("soak-final-highest", seconds: 35) { playback.isReady && playback.decodedWidth == 3840 && playback.decodedHeight == 1920 && playback.qualityStatus == "Highest selected" }
         playback.play(); try await wait("soak-final-resume") { playback.isPlaying }
         record("sustained-decoding-controls-quality-and-memory", app: app)
+    }
+
+    private static func hidingControls(app: AppModel) async throws {
+        try require(inputSurfaceReady?() == true, "tap-surface-hittable-from-inside-in-three-directions")
+        record("input-surface-collision-and-target-ready", app: app)
+        let pose = rendererPose?()
+        try await wait("controls-auto-hide", seconds: 9) { controlsVisible?() == false }
+        record("playing-hides-actual-controls-entity", app: app)
+        sceneTap?()
+        try await wait("single-tap-reveals-controls") { controlsVisible?() == true }
+        try require((rendererPose?()?[5] ?? 10) < 1.6 && (rendererPose?()?[6] ?? 0) < -1, "controls-below-current-eye-line")
+        if let before = pose, let after = rendererPose?() {
+            try require(zip(before.prefix(4), after.prefix(4)).allSatisfy { abs($0-$1) < 0.001 }, "revealing-controls-does-not-recenter-video")
+        }
+        record("single-tap-reveals-below-eyes-without-moving-video", app: app)
+        sceneTap?(); try await wait("second-tap-hides-controls") { controlsVisible?() == false }
+        sceneTap?(); try await wait("third-tap-reveals-controls") { controlsVisible?() == true }
+        app.playback.pause()
+        try await Task.sleep(for: .seconds(6))
+        try require(controlsVisible?() == true, "paused-controls-stay-visible")
+        record("pause-keeps-controls-visible", app: app)
     }
 
     private static func playbackPopovers(_ config: Configuration, app: AppModel) async throws {

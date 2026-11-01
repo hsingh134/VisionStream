@@ -1,4 +1,15 @@
-# Version 0.9.1 build 30 — save queue
+# Verification record
+
+## Hidden controls and first-attempt recovery 0.14.0 (1 November 2026)
+
+- Final full native suites on visionOS 26.0 and 27.0: **200 pass, 12 optional skips, zero failures per runtime** (212 methods). The new teardown regression repeatedly closes a renderer near texture/layout changes and waits for its release. Core suite: **99 pass**; standalone: **93 methods / 1,838 assertions**; HTTPS fixtures: **19 pass**; automation evidence validation: **4 pass**.
+- Final real-scene suites on visionOS 26 and 27: **60 checks pass per runtime** across controls-hide, controls, tabs, automatic playback and downloads. Tests verify inside-sphere collision raycasts in three directions, actual attachment visibility, five-second inactivity hiding, shared single-tap toggle, below-facing placement without moving video, paused visibility and browser return. They do not synthesize physical gaze/pinch input.
+- A controlled native HLS regression fails before the cookie handoff fix and passes afterward: a cookie issued by quality inspection must reach a retained parent master and survive a quality change. Other new tests cover a changed source on the same real DOM video, a first dropped native connection, monotonic controls timing and bounded retry exclusions. AVFoundation may also retry internally; the dropped-connection test does not attribute every retry to application code.
+- Early full runs exposed retained video resources after failure (both runtimes) and a Core Video texture-release crash (27). Failure now releases displayed material/texture references while keeping controls/tracking usable. GPU completion retains its renderer/cache owner, and in-flight frame leases release on the main actor. Final suites pass after these changes; the earlier failures remain in local evidence.
+- Signed build **0.14.0 (35)** passes signature verification and is confirmed installed on the physical headset. The agent did not launch a retained private webpage. Physical gaze/pinch delivery, panel placement while reclining, and the reported intermittent live-site failure still need acceptance/evidence. No private website, account or media was accessed in these tests. The app-owned device diagnostic-history directory was absent, so these attempts have no recorded journal to diagnose.
+
+Private evidence: `TestResults/controls-recovery-0.14.0/matrix.json`. Controlled fixes do not establish the exact cause of an unavailable live-site failure or universal site compatibility.
+
 
 ## Browser usability 0.13.0 (1 November 2026)
 

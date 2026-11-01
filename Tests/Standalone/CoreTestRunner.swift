@@ -106,6 +106,8 @@ import Foundation
             ("token redaction", media.testDisplayRedactsTokens),
             ("default media selection", media.testDefaultSelectionPrefersPreparedDirectVideoOverInactiveFallback),
             ("browser addresses", media.testBrowserAddressValidation),
+            ("controls follow current gaze without moving video", ViewingPoseTests().testRevealingControlsUsesCurrentHeadFrameWithoutMovingVideo),
+            ("bounded transient playback recovery", ViewingPoseTests().testOnlyKnownTransientPlaybackFailuresAreRetried),
             ("address and search navigation", BrowserInputTests().testAddressesStayAddressesAndQueriesAreEncoded),
             ("unsafe input never becomes a search", BrowserInputTests().testInvalidOrCredentialBearingURLsNeverBecomeSearches),
             ("detector JSON contract", media.testDetectorJSONContract),

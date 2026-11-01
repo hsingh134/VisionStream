@@ -9,6 +9,29 @@ import simd
 #endif
 
 final class ViewingPoseTests: XCTestCase {
+    func testRevealingControlsUsesCurrentHeadFrameWithoutMovingVideo() {
+        var pose = ViewingPose()
+        pose.recenter(head: simd_float4x4(simd_quatf(angle: 0.2, axis: SIMD3<Float>(0,1,0))))
+        let video = pose.centre.vector
+        for pitch: Float in [0, .pi/2, -.pi/2] {
+            let head = simd_quatf(angle: 0.8, axis: SIMD3<Float>(0,1,0)) * simd_quatf(angle: pitch, axis: SIMD3<Float>(1,0,0))
+            pose.placeControls(head: simd_float4x4(head))
+            let relative = head.inverse.act(pose.controlsPosition(viewer: [0,1.6,0]) - SIMD3<Float>(0,1.6,0))
+            XCTAssertEqual(relative.y, -0.35, accuracy: 0.001)
+            XCTAssertEqual(relative.z, -1.6, accuracy: 0.001)
+            XCTAssertEqual(pose.centre.vector, video)
+        }
+    }
+    func testOnlyKnownTransientPlaybackFailuresAreRetried() {
+        for code in ["NSURLErrorDomain:-1001", "NSURLErrorDomain:-1005", "NSURLErrorDomain:-1004", "HTTP:503"] {
+            XCTAssertTrue(PlaybackRecoveryPolicy.allowsRetry(codes: [code], httpStatus: nil))
+        }
+        for code in ["HTTP:401", "HTTP:403", "HTTP:404", "NSURLErrorDomain:-1200", "AVFoundationErrorDomain:-11850", "CoreMediaErrorDomain:-12938"] {
+            XCTAssertFalse(PlaybackRecoveryPolicy.allowsRetry(codes: [code], httpStatus: nil))
+            XCTAssertFalse(PlaybackRecoveryPolicy.allowsRetry(codes: [code,"NSURLErrorDomain:-1001"], httpStatus: 403))
+        }
+        XCTAssertFalse(PlaybackRecoveryPolicy.allowsRetry(codes: ["NSURLErrorDomain:-1005"], httpStatus: 404))
+    }
     func testRecenterFacesViewerWhileSeatedReclinedAndOnSide() {
         for pitch: Float in [0, .pi / 4, .pi / 2, -.pi / 2] {
             for roll: Float in [0, .pi / 2, -.pi / 2] {

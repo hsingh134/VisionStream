@@ -34,6 +34,18 @@ public struct ViewingPose: Sendable {
         viewer + controlsOrientation.act(SIMD3<Float>(0, -0.35, -1.6))
     }
 
+    /// Move only the controls to the current head-facing frame; leave the movie centred.
+    public mutating func placeControls(head: simd_float4x4) {
+        var frame = ViewingPose()
+        frame.recenter(head: head)
+        let rotation = simd_float3x3(columns: (SIMD3(head.columns.0.x, head.columns.0.y, head.columns.0.z),
+                                             SIMD3(head.columns.1.x, head.columns.1.y, head.columns.1.z),
+                                             SIMD3(head.columns.2.x, head.columns.2.y, head.columns.2.z)))
+        guard rotation.columns.0.x.isFinite, rotation.columns.1.y.isFinite, rotation.columns.2.z.isFinite,
+              abs(simd_determinant(rotation) - 1) < 0.01 else { return }
+        controlsOrientation = frame.controlsOrientation
+    }
+
     public static func boundedTilt(_ degrees: Double) -> Double {
         degrees.isFinite ? min(90, max(-90, degrees)) : 0
     }

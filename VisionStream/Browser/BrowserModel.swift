@@ -189,6 +189,14 @@ final class BrowserModel: NSObject, Identifiable, WKNavigationDelegate, WKUIDele
         await cookieSnapshot.cookies(for:url)
     }
 
+    func freshCandidate(for candidate: MediaCandidate) -> MediaCandidate {
+        guard !candidate.videoID.isEmpty else { return candidate }
+        return candidates.first {
+            $0.id == candidate.id && $0.videoID == candidate.videoID &&
+            $0.pageURL == candidate.pageURL && $0.normalizedMIMEType == candidate.normalizedMIMEType
+        } ?? candidate
+    }
+
     func playbackUserAgent() async -> String? {
         // Match this WebKit client's actual identifier, rather than inventing a
         // Safari/device identity or using an extractor-supplied header.

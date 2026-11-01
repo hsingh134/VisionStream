@@ -115,6 +115,7 @@ final class AppModel {
         let jobs=hlsDownloads.videos.map { Job(id:$0.id,state:$0.state.rawValue,bytes:$0.bytes,progress:$0.fraction,context:$0.diagnosticContext?.sanitized(),legacyUnlinked:$0.diagnosticContext == nil,failureCodes:PlaybackDiagnostics.sanitizedCodes($0.failureCodes ?? [])) }
         object["queuedSaveCount"]=queuedSaves.count
         object["openTabCount"]=tabs.pages.count
+        object["preparationRetryCount"]=playback.preparationRetryCount
         object["queuedSaveAttempts"]=queuedSaves.compactMap { $0.context.flatMap { try? JSONSerialization.jsonObject(with:encoder.encode($0.sanitized())) } }
         object["downloadJobs"]=(try? JSONSerialization.jsonObject(with:encoder.encode(jobs))) ?? []
         object["playbackAttempt"] = playback.diagnosticContext.flatMap { try? JSONSerialization.jsonObject(with:encoder.encode($0)) } ?? NSNull()

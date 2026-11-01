@@ -1,5 +1,12 @@
 # Technical architecture
 
+## Controls and first-attempt recovery (0.14.0)
+
+`ImmersiveControlsModel` tracks a monotonic five-second inactivity deadline. Pause, buffering, seeking, recentering and expanded settings keep the attachment visible. A separate inward-facing static collision mesh at six metres surrounds the viewer and accepts system indirect input. A targeted tap toggles visibility; the SwiftUI attachment remains nearer, so its own buttons receive input. Each reveal captures current head orientation, places the panel 0.35 metres below the facing line at 1.6 metres, and preserves the video orientation. The panel stays in place while visible. No gaze samples or pose history are stored. Stream failure releases displayed materials/textures while leaving tracking and the tap surface available for exit. In-flight frame leases are retained by the renderer until GPU completion and released on the main actor; completion retains the cache owner through teardown.
+
+Before native handoff, a detected candidate is refreshed only from the same DOM video identity and page; navigation, tab and cancellation guards still apply. HLS quality inspection merges legitimately issued, normally scoped cookies whether selecting a child rendition or retaining the parent master. Those cookies stay in memory for quality changes. Previously the retained-master path lost inspection response cookies. One retry is permitted for identified transient connection errors or HTTP 502/503/504, within the original preparation deadline; authentication, TLS, protected media and unknown format errors are not retried. Diagnostics count the retry without adding raw media URLs or cookie values. These changes do not diagnose an unavailable live-site failure.
+
+
 ## Reclined viewing (0.12.0)
 
 **Recenter** starts a three-second countdown. Look where the video should face; the renderer captures the full head orientation, including upward pitch and side tilt. It keeps that orientation fixed while you look around naturally. **Position → Video tilt** adjusts the video up/down by up to 90 degrees relative to the captured centre without moving the controls. **Reset tilt** removes that adjustment; **Reset upright** levels the video with the room and keeps the controls facing you. Recenter clears manual tilt. Each new immersive session starts centred on the current head pose; quality changes preserve the current position.

@@ -37,6 +37,35 @@ class Handler(BaseHTTPRequestHandler):
 
     def respond(self, head):
         path = unquote(urlsplit(self.path).path)
+        if path.startswith('/first-connection-drop/'):
+            counts = getattr(self.server, 'connection_drop_counts', {})
+            count = counts.get(path, 0); counts[path] = count + 1
+            self.server.connection_drop_counts = counts
+            if count == 0:
+                self.close_connection = True
+                return
+            path = '/vr180-sbs.mp4'
+        if path.startswith('/master-cookie/'):
+            parts = path.split('/')
+            prefix = '/master-cookie/' + parts[2] + '/'
+            if path == prefix + 'master.m3u8':
+                counts = getattr(self.server, 'master_cookie_counts', {})
+                first = counts.get(prefix, 0) == 0
+                counts[prefix] = counts.get(prefix, 0) + 1
+                self.server.master_cookie_counts = counts
+                body = b'#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=4000000,RESOLUTION=1440x720\nhigh/index.m3u8\n'
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/vnd.apple.mpegurl')
+                if first: self.send_header('Set-Cookie', 'master_ticket=allowed; Path=' + prefix + '; Secure; HttpOnly')
+                self.send_header('Content-Length', str(len(body))); self.end_headers()
+                if not head: self.wfile.write(body)
+                return
+            cookies = SimpleCookie()
+            try: cookies.load(self.headers.get('Cookie', ''))
+            except Exception: pass
+            if cookies.get('master_ticket') is None or cookies['master_ticket'].value != 'allowed':
+                self.send_error(403); return
+            path = path.replace(prefix + 'high/', '/quality/high/', 1)
         if path == '/metadata-transient.mp4':
             if self.headers.get('Range') == 'bytes=0-262143' and not getattr(self.server, 'metadata_dropped_once', False):
                 self.server.metadata_dropped_once = True

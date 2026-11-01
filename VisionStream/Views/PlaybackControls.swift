@@ -23,6 +23,10 @@ import SwiftUI
                         .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
                 Spacer()
+                if immersive {
+                    Button("Hide controls", systemImage: "eye.slash") { playback.controls.hide() }
+                        .labelStyle(.iconOnly).help("Tap the video once to show controls again")
+                }
                 if playback.isBuffering || playback.isSeeking || playback.isPreparing { ProgressView().controlSize(.small).accessibilityLabel("Loading video") }
                 Button { showFormat = false; showPosition = false; showQuality.toggle() } label: { Label(playback.isOffline ? "Offline" : playback.quality.label, systemImage: "sparkles.tv") }
                     .disabled(playback.isPreparing || playback.isOffline).accessibilityLabel(playback.isOffline ? "Offline video quality" : "Streaming quality")
@@ -69,6 +73,7 @@ import SwiftUI
                     .keyboardShortcut(.rightArrow, modifiers: [])
             }
             Divider().opacity(0.4)
+            if immersive { Text("Tap the video to hide or show controls").font(.caption).foregroundStyle(.secondary) }
             HStack {
                 Button { showQuality = false; showPosition = false; showFormat.toggle() } label: {
                     Label("\(playback.automaticallyDetectFormat ? "Auto · " : "")\(playback.presentation.label) · \(playback.layout.label)", systemImage: "slider.horizontal.3")
@@ -102,6 +107,12 @@ import SwiftUI
                 Button("Done") { showQuality = false }.frame(maxWidth: .infinity, alignment: .trailing)
             }
         }.padding(28).controlSize(.regular)
+            .simultaneousGesture(TapGesture().onEnded { app.playback.controls.interacted() })
+            .onChange(of: scrubTime) { _, _ in app.playback.controls.interacted() }
+            .onChange(of: showFormat || showQuality || showPosition || scrubbing || returningToPage) { _, held in
+                app.playback.controls.interactionLocked = held
+                app.playback.controls.interacted()
+            }
             .simulatorPanel(.playback)
             .onAppear {
                 #if targetEnvironment(simulator)

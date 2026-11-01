@@ -3,6 +3,7 @@ import Observation
 
 @MainActor @Observable
 final class PlaybackModel {
+    let controls = ImmersiveControlsModel()
     let player = AVPlayer()
     @ObservationIgnored weak var diagnostics: SessionDiagnostics?
     private(set) var diagnosticContext: DiagnosticContext?
@@ -34,6 +35,7 @@ final class PlaybackModel {
     private(set) var mediaHTTPStatus: Int?
     private(set) var diagnosticCandidate: MediaCandidate?
     private(set) var browserUserAgentApplied = false
+    private(set) var preparationRetryCount = 0
     var errorMessage: String?
     var projection: VideoProjection = .vr180 { didSet { if projection != oldValue { trace(.format, action: "projection-changed") } } }
     var layout: StereoLayout = .mono { didSet { if layout != oldValue { trace(.format, action: "layout-changed") } } }
@@ -146,6 +148,7 @@ final class PlaybackModel {
         failureCodes = []; mediaHTTPStatus = nil
         failureReason = .none; itemStatusAtFailure = .notCreated; errorLogCodes = []
         browserUserAgentApplied = false
+        preparationRetryCount = 0
         decodedWidth = 0; decodedHeight = 0
         guard let url = URL(string: candidate.source), ownedLocalFile ? url.isFileURL : candidate.compatibility == .candidate else {
             diagnosticStage = "unsupported-candidate"
@@ -163,7 +166,7 @@ final class PlaybackModel {
         }
     }
 
-    private func load(_ candidate: MediaCandidate, url: URL, cookies: [HTTPCookie], userAgent: String?, token: UUID) async -> Bool {
+    private func load(_ candidate: MediaCandidate, url: URL, cookies: [HTTPCookie], userAgent: String?, token: UUID, attempt: Int = 0) async -> Bool {
         guard generation == token, !Task.isCancelled else { return false }
         isPreparing = true
         diagnosticStage = "loading-asset"
@@ -210,12 +213,20 @@ final class PlaybackModel {
                     } + issued
                     qualityStatus = "Highest selected"
                 } else { qualityStatus = "Adaptive · source controls quality"; diagnostics?.record(.quality,context:diagnosticContext,labels:["decision":"retain-original-adaptive-source"]) }
+                // A retained parent master also needs cookies legitimately
+                // issued by the inspection request. Previously only a pinned
+                // child inherited them, so an initial handshake could be lost.
+                let issued = probe.cookies(for: selectedURL)
+                selectedCookies = CookieScope.matching(selectedCookies, url: selectedURL).filter { old in
+                    !issued.contains { $0.name == old.name && $0.domain == old.domain && $0.path == old.path }
+                } + issued
                 qualityRequest = nil
             } else if !url.isFileURL, candidate.normalizedMIMEType.contains("mpegurl") || url.pathExtension.lowercased() == "m3u8" {
                 qualityStatus = "Adaptive"
             }
             guard generation == token, !Task.isCancelled else { return false }
             // Public AVFoundation API only. No Referer spoofing, undocumented header keys, or proxy.
+            playbackCookies = selectedCookies
             var options: [String: Any] = [AVURLAssetHTTPCookiesKey: selectedCookies]
             if let userAgent, !userAgent.isEmpty, userAgent.utf8.count <= 1024,
                userAgent.rangeOfCharacter(from: .controlCharacters) == nil {
@@ -272,9 +283,7 @@ final class PlaybackModel {
             }
             guard generation == token, !Task.isCancelled else { return false }
             guard item.status == .readyToPlay else {
-                recordFailure(item.error, item: item)
-                fail(PlaybackDiagnostics.failureHint(item.error) ?? "The native player rejected the stream. Check website access, URL expiry, and MP4/HLS codec support. No media was downloaded as a file.", reason: .playerRejected)
-                return false
+                throw item.error ?? NSError(domain: "AVFoundationErrorDomain", code: -11800)
             }
             if automaticallyDetectFormat, let track = try? await asset.loadTracks(withMediaType: .video).first,
                let formats = try? await track.load(.formatDescriptions), let format = formats.first {
@@ -318,8 +327,23 @@ final class PlaybackModel {
         } catch {
             guard generation == token else { return false }
             guard !Task.isCancelled else { return false }
+            let rejectedByPlayer = player.currentItem?.status == .failed
             recordFailure(error, item: player.currentItem)
-            fail(PlaybackDiagnostics.failureHint(error) ?? "The stream could not be opened. Check the connection and website access. Signed links, required headers, and unsupported codecs can prevent native playback.", reason: .assetLoadFailed)
+            if attempt == 0, !url.isFileURL, PlaybackRecoveryPolicy.allowsRetry(codes: failureCodes + errorLogCodes, httpStatus: mediaHTTPStatus) {
+                preparationRetryCount = 1
+                diagnostics?.record(.playback, context: diagnosticContext, labels: ["phase": "retry-transient-load"], numbers: ["attempt": 1], codes: failureCodes + errorLogCodes)
+                metricEvents?.cancel(); metricEvents = nil
+                asset?.cancelLoading(); asset = nil
+                player.pause(); player.replaceCurrentItem(with: nil); videoOutput = nil
+                try? await Task.sleep(for: .milliseconds(500))
+                guard generation == token, !Task.isCancelled else { return false }
+                let refreshed = await cookieProvider?(url) ?? cookies
+                guard generation == token, !Task.isCancelled else { return false }
+                failureCodes = []; errorLogCodes = []; mediaHTTPStatus = nil; itemStatusAtFailure = .notCreated
+                // The outer preparation deadline remains active, bounding both attempts.
+                return await load(candidate, url: url, cookies: refreshed, userAgent: userAgent, token: token, attempt: 1)
+            }
+            fail(PlaybackDiagnostics.failureHint(error) ?? "The stream could not be opened. Check the connection and website access. Signed links, required headers, and unsupported codecs can prevent native playback.", reason: rejectedByPlayer ? .playerRejected : .assetLoadFailed)
             return false
         }
     }
@@ -537,6 +561,7 @@ final class PlaybackModel {
         failureReason = .none; itemStatusAtFailure = .notCreated; errorLogCodes = []
         diagnosticCandidate = nil
         browserUserAgentApplied = false
+        preparationRetryCount = 0
         decodedWidth = 0; decodedHeight = 0
     }
 

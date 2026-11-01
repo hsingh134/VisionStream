@@ -2,7 +2,7 @@
 
 A native web browser and immersive video player for Apple Vision Pro. Browse a website, start a compatible video and open it in a native Screen, VR180 or VR360 viewer.
 
-**Current version: 0.13.0 · Early source release · visionOS 26+**
+**Current version: 0.14.0 · Early source release · visionOS 26+**
 
 VisionStream has automated simulator coverage on visionOS 26 and 27 and has been installed on a physical Vision Pro. Physical-headset playback, comfort and broad website compatibility still need testing. It is not currently available through the App Store or TestFlight.
 
@@ -17,6 +17,7 @@ VisionStream has automated simulator coverage on visionOS 26 and 27 and has been
 - Automatic format detection using available metadata and repeated frame comparisons, with manual overrides for ambiguous sources.
 - Highest-quality preference for supported published renditions; actual decoded resolution is shown. Some HLS sources remain adaptive.
 - Playback, seeking, recentering and manual video tilt for positioning the picture while seated or reclined.
+- Auto-hiding immersive controls: tap the video once to reveal them just below where you face.
 - Supported MP4/HLS saves, a sequential save queue, offline playback and MP4 import/export.
 - Local troubleshooting reports; no automatic analytics or diagnostic uploads.
 
@@ -57,6 +58,8 @@ Keyboard: **⌘L** address, **⌘T** new tab, **⌘W** close tab, **⌘D** saved
 
 Open a page and press its Play button. Compatible sources can open automatically in the native viewer. If that does not happen, use **Watch in VR** or **Find streams**. Automatic format detection is an estimate; change Format manually if needed. Projection (VR180/VR360) and eye layout (mono/side-by-side/top-bottom) are independent settings.
 
+During playback the controls hide after five seconds. Tap the video once (look and pinch on Vision Pro) to show them below your current head-facing direction without moving the video. Tap again or choose **Hide controls** to hide them. They stay visible while paused or adjusting settings.
+
 **Recenter** starts a three-second countdown: look toward the desired video centre and hold your pose. **Position → Video tilt** adjusts up/down by up to 90°. **Return to page** restores the browser. Reclining comfort and gaze/pinch interaction still need physical-device acceptance.
 
 ## Compatibility and limitations
@@ -67,7 +70,7 @@ Open a page and press its Play button. Compatible sources can open automatically
 - Highest quality means the highest safely selectable supported published rendition, not guaranteed 4K/8K or a resolution absent from the source.
 - Equirectangular projection is supported. Fisheye, cubemap, Apple Immersive Video/MV-HEVC, full HDR workflows, captions and alternate audio selection need more work.
 - YouTube-specific support is deferred.
-- Controls currently remain visible during immersive playback; auto-hide is not implemented.
+- Physical gaze/pinch delivery of the show/hide gesture still needs headset acceptance; the real scene collision surface and shared visibility actions are covered by simulator tests.
 
 Read [test results](Docs/TESTING.md), [live-site observations](Docs/LIVE_SITE_TESTS.md), [production readiness](Docs/PRODUCTION_READINESS.md), [architecture](Docs/ARCHITECTURE.md) and [download limits](Docs/MEDIA_RUNTIME.md). Historical test references may point to private local evidence omitted from this public source package. They do not establish universal website support.
 

@@ -1,5 +1,14 @@
 # Current additions — 0.6.0
 
+## Hidden controls and playback recovery (0.14.0)
+
+Repeated renderer teardown checks that pending GPU frame completion releases the scene, including near layout/texture changes. This addresses an observed Core Video texture-release crash in a preceding simulator run; a bounded stress pass is not proof that all platform/GPU failures are impossible.
+
+`controls-hide` runs normal CC0 HLS in the actual immersive scene, verifies the inward-facing input collider with scene raycasts from inside in three directions, waits for the actual attachment entity to auto-hide, invokes the same toggle action as the targeted tap, verifies below-eye placement without changing the video pose, verifies pause prevents hiding, and returns to the browser. This verifies input configuration and the action boundary, not physical gaze/pinch delivery.
+
+The retained-master cookie fixture issues an ordinary Secure HttpOnly cookie only on its first quality-inspection request and requires it for media. The pre-fix native test fails; the corrected handoff and a quality switch pass. Other tests change the source of the same real DOM video element and drop the first native media connection. The retry policy allows one known transport/502/503/504 retry within the original preparation deadline and rejects access/TLS/unknown-response cases. Native AVFoundation may also perform internal retries; the first-drop test does not attribute every retry to application code. No private-site diagnosis is inferred from fixtures.
+
+
 ## Browser usability (0.13.0)
 
 `BrowserTabsNativeTests` checks tab identity/capacity/closing, separate WebKit navigation stacks, background media suspension, active-tab-only native play intents, stale-gesture suppression, cross-tab website-data clearing, and saved favourite migration/persistence. `BrowserInputTests` checks URL/search classification and ensures invalid explicit or credential-bearing URLs never fall back to search. No external search request is made by tests.
