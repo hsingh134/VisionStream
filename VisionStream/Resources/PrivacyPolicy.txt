@@ -1,5 +1,5 @@
 VisionStream privacy policy
-Updated 26 October 2026
+Updated 1 November 2026
 
 VisionStream is a general-purpose web browser and immersive video player. It has no developer-operated account, advertising service, analytics upload service or automatic diagnostic uploader.
 
@@ -8,8 +8,11 @@ When automatic video opening is enabled, a recent recognised Play interaction is
 
 When you open a website, its servers receive normal browsing requests, including your network address and browser information. Websites control their own content, cookies, accounts, analytics and privacy practices. VisionStream does not promise that third-party websites do not track you. Native playback, source discovery, libraries and saving contact the media or library addresses you choose. Supported playback and saving may use the normal cookies and browser identity needed for that request. VisionStream does not collect your website passwords into a separate developer account or send them to the developer.
 
+Address searches and tabs
+The address box accepts website addresses or search words. Choosing Search sends the submitted query to DuckDuckGo over HTTPS. Typing alone does not request remote suggestions. Search-provider and destination-site privacy practices apply. Tabs share the normal WebKit website-session store; they are not private browsing. Tab lists and each tab’s back/forward list remain in memory rather than being saved as a new browsing history. The existing startup preference can still remember the last active website/page. Background tabs have media playback suspended but may continue other website requests. Closing the final tab clears the remembered startup address.
+
 What remains on your device
-WebKit stores website sessions and website data. Browser settings choose whether to remember Home, the last website, or a full last-page address. Full addresses can include private page identifiers. Bookmarks intentionally retain the links you save. Bookmarks, settings and website data may be handled by normal operating-system backups. Clear website data signs you out and removes remembered restoration details; it keeps bookmarks and saved videos.
+WebKit stores website sessions and website data. Browser settings choose whether to remember Home, the last website, or a full last-page address. Full addresses can include private page identifiers. Bookmarks and favourites intentionally retain the links you save. Favourites are pinned bookmarks, not a separate copy of browsing history. Bookmarks, settings and website data may be handled by normal operating-system backups. Clear website data signs you out and removes remembered restoration details; it keeps bookmarks and saved videos.
 
 Videos
 Downloads and imports are saved in VisionStream's application container. Original imported files are kept. Saved copies are excluded from normal backups. You can play, export or delete saved copies in Downloads. Exported copies belong to the destination you choose and cannot be deleted from another application by VisionStream. Apple's native background HLS service can retain request information privately to complete downloads; cancel active transfers and clear website data when you want to end that access. Apple manages the operating system and its own privacy practices.

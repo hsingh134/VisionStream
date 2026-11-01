@@ -17,6 +17,8 @@ import Observation
         }
     }
     private(set) var bookmarks: [WebsiteBookmark] = []
+    private(set) var favouriteIDs: Set<UUID> = []
+    var favourites: [WebsiteBookmark] { bookmarks.filter { favouriteIDs.contains($0.id) } }
     private(set) var hasDamagedBookmarks = false
     var message: String?
     init(defaults: UserDefaults = .standard) {
@@ -32,6 +34,9 @@ import Observation
         }
         if restoration == .home { clearRestoration() }
         else if let raw = defaults.string(forKey: "lastPage"), let url = URL(string: raw) { remember(url) }
+        if let values = defaults.stringArray(forKey: "favouriteBookmarks"), values.count <= 500 {
+            favouriteIDs = Set(values.compactMap(UUID.init(uuidString:))).intersection(bookmarks.map(\.id))
+        }
     }
     var restoredURL: URL? {
         defaults.string(forKey: "lastPage").flatMap(URL.init(string:)).flatMap { restoration.address($0) }
@@ -55,6 +60,24 @@ import Observation
     func removeBookmark(_ bookmark: WebsiteBookmark) {
         guard !hasDamagedBookmarks else { return }
         persist(bookmarks.filter { $0.id != bookmark.id })
+        setFavourite(bookmark, enabled: false)
+    }
+    func isFavourite(_ url: URL?) -> Bool {
+        guard let url else { return false }
+        return favourites.contains { $0.address == url.absoluteString }
+    }
+    func setFavourite(_ bookmark: WebsiteBookmark, enabled: Bool) {
+        guard !hasDamagedBookmarks else { return }
+        if enabled, bookmarks.contains(where: { $0.id == bookmark.id }) { favouriteIDs.insert(bookmark.id) }
+        else { favouriteIDs.remove(bookmark.id) }
+        defaults.set(favouriteIDs.map(\.uuidString).sorted(), forKey: "favouriteBookmarks")
+    }
+    func saveFavourite(name: String, address: String) {
+        saveBookmark(name: name, address: address)
+        if let normalized = WebsiteBookmark(name: name, address: address),
+           let saved = bookmarks.first(where: { $0.address == normalized.address }) {
+            setFavourite(saved, enabled: true)
+        }
     }
     func resetBookmarks() {
         if let old = defaults.data(forKey: "bookmarks") {
@@ -62,6 +85,7 @@ import Observation
             defaults.set(old, forKey: "bookmarks.previous")
         }
         persist([]); hasDamagedBookmarks = false
+        favouriteIDs = []; defaults.removeObject(forKey: "favouriteBookmarks")
     }
     private func persist(_ values: [WebsiteBookmark]) {
         guard let data = try? JSONEncoder().encode(values), data.count <= 2_000_000 else { message = "The bookmark list is full. Remove a bookmark and try again."; return }

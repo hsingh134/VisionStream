@@ -17,7 +17,7 @@ import Darwin
             return from(ProcessInfo.processInfo.environment)
         }
         static func from(_ env: [String: String]) -> Self? {
-            let names: Set<String> = ["auto-play", "soak", "saved-state", "downloads", "forms", "quality", "quality4k", "controls", "controls-format", "controls-quality", "mp4", "hls", "library", "library-hls", "cancel", "unsupported", "finder", "reentry", "interrupted"]
+            let names: Set<String> = ["tabs", "auto-play", "soak", "saved-state", "downloads", "forms", "quality", "quality4k", "controls", "controls-format", "controls-quality", "mp4", "hls", "library", "library-hls", "cancel", "unsupported", "finder", "reentry", "interrupted"]
             guard let name = env["VISIONSTREAM_SCENE_TEST"], names.contains(name),
                   let raw = env["VISIONSTREAM_TEST_ORIGIN"], let url = URL(string: raw),
                   url.scheme == "https", ["127.0.0.1", "localhost"].contains(url.host ?? ""),
@@ -26,7 +26,10 @@ import Darwin
                   let identifier = env["VISIONSTREAM_SCENE_TEST_ID"], UUID(uuidString: identifier) != nil else { return nil }
             if name == "finder", env["VISIONSTREAM_TEST_PUBLIC_EXTRACTOR"] != "1" { return nil }
             let review = env["VISIONSTREAM_TEST_REVIEW_PANEL"]
-            if let review { guard name == "forms", ["address", "stream", "finder", "library", "details", "downloads", "bookmarks", "settings"].contains(review) else { return nil } }
+            if let review {
+                let formPanel = name == "forms" && ["address", "stream", "finder", "library", "details", "downloads", "bookmarks", "settings"].contains(review)
+                guard formPanel || (name == "tabs" && review == "tabs") else { return nil }
+            }
             let seconds = Int(env["VISIONSTREAM_TEST_SOAK_SECONDS"] ?? "600") ?? 0
             guard name != "soak" || (60...1800).contains(seconds) else { return nil }
             return .init(name: name, origin: url, identifier: identifier, soakSeconds: seconds, reviewPanel: review)
@@ -113,6 +116,7 @@ import Darwin
 
     private static func run(_ config: Configuration, app: AppModel) async throws {
         try await wait("browser-mounted") { mounted(.browser) && app.browser.webView.window != nil }
+        if config.name == "tabs" { try await browserTabs(config, app: app); return }
         if config.name == "forms" { try await forms(config, app: app); return }
         if config.name == "auto-play" { try await automaticPlayback(config,app:app);return }
         let path = ["quality4k", "soak"].contains(config.name) ? "quality-4k.html" : (["quality", "quality4k", "soak"].contains(config.name) || config.name.hasPrefix("controls")) ? "quality.html" : ["mp4", "reentry", "interrupted"].contains(config.name) ? "automation-mp4" : (config.name == "hls" ? "automation-hls" : "empty-test")
@@ -463,6 +467,48 @@ import Darwin
         try await wait("automatic-empty-navigation") { app.browser.pageHTTPStatus==200 && !app.browser.isLoading && app.browser.candidates.isEmpty && !mounted(.videoBar) }
         try require(app.downloads.videos.isEmpty && app.queuedSaves.isEmpty && !app.saveInProgress,"automatic-play-does-not-download")
         record("leaving-video-hides-bar-and-no-download-was-started",app:app)
+    }
+
+    private static func browserTabs(_ config: Configuration, app: AppModel) async throws {
+        let original = app.browser
+        openAddress?(); try await wait("tabs-address-mounted") { mounted(.address) }
+        submitAddress?(config.origin.appendingPathComponent("empty-test").absoluteString)
+        try await wait("tabs-first-page", seconds: 45) { original.pageHTTPStatus == 200 && !original.isLoading && original.webView.window != nil }
+        app.tabs.preferences.saveFavourite(name: "CC0 calibration", address: config.origin.appendingPathComponent("quality.html").absoluteString)
+        try require(app.tabs.preferences.favourites.count == 1, "favourite-saved")
+        record("first-tab-and-favourite", app: app)
+        guard let second = app.tabs.add(url: config.origin.appendingPathComponent("quality.html")) else { throw Failure.check("second-tab-created") }
+        try await wait("second-tab-mounted", seconds: 45) { second.webView.window != nil && !second.isLoading && second.pageHTTPStatus == 200 && original.webView.window == nil }
+        try require(!original.isActiveTab && second.isActiveTab && app.browser === second, "active-tab-isolation")
+        record("second-webview-replaces-first-without-reloading-it", app: app)
+        app.tabs.select(original.id)
+        try await wait("first-tab-reattached") { original.webView.window != nil && second.webView.window == nil }
+        try require(original.webView.url?.path == "/empty-test", "first-page-preserved")
+        record("switch-preserves-original-page", app: app)
+        guard let fresh = app.tabs.add() else { throw Failure.check("fresh-tab-created") }
+        try await wait("fresh-home-mounted") { fresh.webView.window != nil && fresh.isStartPage && !fresh.isLoading }
+        try require(fresh.address.isEmpty, "new-tab-does-not-restore-a-private-page")
+        record("new-tab-opens-home", app: app)
+        if config.reviewPanel == "tabs" { return }
+        app.tabs.close(fresh.id); app.tabs.select(second.id)
+        try await wait("video-tab-reattached") { second.webView.window != nil && second.candidates.contains { $0.compatibility == .candidate } }
+        if let media = MediaCandidate.preferredForPlayback(in: second.candidates) { watchAction?(media) }
+        app.tabs.select(original.id)
+        try await wait("tab-change-cancels-preparation") { !app.playback.openingImmersive && !app.playback.isPreparing && original.webView.window != nil }
+        try require(!app.playback.immersiveActive, "old-tab-cannot-open-vr-after-switch")
+        record("tab-switch-cancels-stale-video-handoff", app: app)
+        app.tabs.select(second.id)
+        try await wait("video-tab-restored") { second.webView.window != nil }
+        if let media = MediaCandidate.preferredForPlayback(in: second.candidates) { watchAction?(media) }
+        try await wait("tab-native-playback", seconds: 45) { app.playback.immersiveActive && app.playback.decodedWidth == 1440 && returnAction != nil }
+        record("selected-tab-streams-in-native-vr", app: app)
+        if let exit = returnAction { await exit() }
+        try await wait("return-restores-selected-tab", seconds: 25) { !app.playback.immersiveActive && app.browser === second && second.webView.window != nil }
+        record("return-restores-selected-tab-and-page", app: app)
+        app.tabs.close(second.id)
+        try await wait("closing-selects-original") { app.browser === original && original.webView.window != nil }
+        if let favourite = app.tabs.preferences.favourites.first { app.tabs.preferences.removeBookmark(favourite) }
+        record("closing-active-tab-restores-neighbour", app: app)
     }
 
     private static func forms(_ config: Configuration, app: AppModel) async throws {

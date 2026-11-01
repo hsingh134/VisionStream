@@ -106,6 +106,8 @@ import Foundation
             ("token redaction", media.testDisplayRedactsTokens),
             ("default media selection", media.testDefaultSelectionPrefersPreparedDirectVideoOverInactiveFallback),
             ("browser addresses", media.testBrowserAddressValidation),
+            ("address and search navigation", BrowserInputTests().testAddressesStayAddressesAndQueriesAreEncoded),
+            ("unsafe input never becomes a search", BrowserInputTests().testInvalidOrCredentialBearingURLsNeverBecomeSearches),
             ("detector JSON contract", media.testDetectorJSONContract),
             ("hemisphere and UV orientation", projection.testHemisphereLooksForwardAndUVOrientation),
             ("sphere seams and radius", projection.testSphereSeamClosesAndRadiusIsConstant),

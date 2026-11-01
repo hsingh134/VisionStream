@@ -19,7 +19,7 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 BUNDLE = 'personal.visionstream.browser'
-DEFAULT_CASES = ['forms', 'mp4', 'hls', 'library', 'library-hls', 'cancel', 'unsupported', 'reentry']
+DEFAULT_CASES = ['forms', 'tabs', 'mp4', 'hls', 'library', 'library-hls', 'cancel', 'unsupported', 'reentry']
 
 def read_json(path):
     try: return json.loads(path.read_text())

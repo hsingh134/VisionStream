@@ -1,5 +1,16 @@
 # Version 0.9.1 build 30 — save queue
 
+## Browser usability 0.13.0 (1 November 2026)
+
+- Both visionOS 26.0 and 27.0 full native suites: **193 pass, 12 optional skips, zero failures** per runtime. The new tests cover tab identities/capacity, independent back stacks, live WebKit media suspension and reactivation, blocked inactive/stale play intents, favourite migration/persistence and all-tab website-data clearing.
+- Swift Package core suite: **97 pass**. Standalone core runner: **91 methods / 1,812 assertions**, zero failures. Address/search tests do not contact an external search provider.
+- Final real-scene suites on each runtime: **63 checks pass** across tabs, saved state, forms, automatic playback, controls and downloads. The tabs scenario attaches each real WKWebView, cancels a handoff after switching, plays original CC0 native VR from the selected tab and restores that same tab on exit. These are shared production actions, not simulated gaze/pinch.
+- Signed device build 0.13.0 (34) passes signature verification and is confirmed installed on the physical headset. It was not agent-launched into a retained private webpage. Physical gaze/pinch, reclining comfort and eight complex tabs under sustained memory/thermal pressure remain unverified.
+- Native suites use the final tab models. A later simulator-only review hook and reload keyboard routing are included in the final scene and device builds; no additional website compatibility claim is made.
+
+Private evidence: `TestResults/browser-usability-0.13.0/matrix.json`. Original CC0 screenshots are reviewed separately.
+
+
 Verification for 0.12.0: 95 Swift package tests pass; the standalone runner passes 89 methods / 1,797 assertions. Each visionOS 26/27 full native suite passes 185 methods with 12 optional skips and no failures. The 27 combined scene run passes 69 checks. On 26, the first five scene cases pass 57 checks; its last forms dismissal times out and the isolated 12-check forms rerun passes. Initial countdown cancellation and attachment-popover failures were corrected and retained as evidence. See `TestResults/reclined-viewing-0.12.0/matrix.json`. New coverage uses original CC0 fixtures and synthetic head transforms; no new live-site or physical-headset acceptance is claimed.
 
 ## Reclined viewing (0.12.0)

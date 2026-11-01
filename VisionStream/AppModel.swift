@@ -8,7 +8,8 @@ final class AppModel {
     var diagnosticsEnabled:Bool
     var privacyMessage:String?
     @ObservationIgnored private let privacyDefaults:UserDefaults
-    let browser = BrowserModel()
+    let tabs = BrowserTabs()
+    var browser: BrowserModel { tabs.active }
     let playback = PlaybackModel(automaticallyDetectFormat: true)
     let library = VRLibraryModel()
     let extractor = ExtractorModel()
@@ -34,7 +35,7 @@ final class AppModel {
         let enabled=history?.isEnabled ?? ((privacyDefaults.object(forKey:"diagnostics.capture.enabled") as? Bool) ?? legacyExists)
         self.diagnosticsEnabled=enabled
         self.history=history ?? SessionDiagnostics(root:diagnosticRoot,enabled:enabled)
-        browser.diagnostics=self.history; playback.diagnostics=self.history; library.diagnostics=self.history
+        tabs.diagnostics=self.history; playback.diagnostics=self.history; library.diagnostics=self.history
         self.downloads.diagnostics=self.history; self.hlsDownloads.diagnostics=self.history; extractor.diagnostics=self.history
         self.hlsDownloads.onForegroundFallback = { [weak self] request in
             guard let self,!self.downloads.isDownloading else { return false }
@@ -59,7 +60,7 @@ final class AppModel {
         for job in self.hlsDownloads.videos {
             self.history.record(.restoredDownload,context:job.diagnosticContext,labels:["phase":job.state.rawValue,"reason":job.diagnosticContext == nil ? "legacy-unlinked":"restored-existing-job"],numbers:["savedBytes":Double(job.bytes),"progress":job.fraction],codes:job.failureCodes ?? [])
         }
-        browser.onNavigation = { [weak playback, weak library, weak extractor] in
+        tabs.onNavigation = { [weak playback, weak library, weak extractor] in
             playback?.cancelPreparation()
             playback?.resetDiagnosticsWhenIdle()
             library?.clear()
@@ -113,6 +114,7 @@ final class AppModel {
         let encoder=JSONEncoder()
         let jobs=hlsDownloads.videos.map { Job(id:$0.id,state:$0.state.rawValue,bytes:$0.bytes,progress:$0.fraction,context:$0.diagnosticContext?.sanitized(),legacyUnlinked:$0.diagnosticContext == nil,failureCodes:PlaybackDiagnostics.sanitizedCodes($0.failureCodes ?? [])) }
         object["queuedSaveCount"]=queuedSaves.count
+        object["openTabCount"]=tabs.pages.count
         object["queuedSaveAttempts"]=queuedSaves.compactMap { $0.context.flatMap { try? JSONSerialization.jsonObject(with:encoder.encode($0.sanitized())) } }
         object["downloadJobs"]=(try? JSONSerialization.jsonObject(with:encoder.encode(jobs))) ?? []
         object["playbackAttempt"] = playback.diagnosticContext.flatMap { try? JSONSerialization.jsonObject(with:encoder.encode($0)) } ?? NSNull()

@@ -1,5 +1,14 @@
 # Current additions — 0.6.0
 
+## Browser usability (0.13.0)
+
+`BrowserTabsNativeTests` checks tab identity/capacity/closing, separate WebKit navigation stacks, background media suspension, active-tab-only native play intents, stale-gesture suppression, cross-tab website-data clearing, and saved favourite migration/persistence. `BrowserInputTests` checks URL/search classification and ensures invalid explicit or credential-bearing URLs never fall back to search. No external search request is made by tests.
+
+The `tabs` scene calls the same tab actions as the controls, waits for actual WKWebView attachment/detachment, preserves pages through tab changes, cancels a stale native-video preparation, streams original CC0 media from the selected tab, returns to that tab, and closes it to restore its neighbour. This is shared-action scene testing, not synthetic gaze/pinch input. The existing `auto-play`, `saved-state`, `forms`, `downloads` and `controls` scenes remain regression checks.
+
+For screenshots only, `VISIONSTREAM_TEST_REVIEW_PANEL=tabs` with the `tabs` scenario holds the third Home tab and its local favourite after mounting. As with the existing forms reviews, it is accepted only in the simulator with a UUID and HTTPS loopback fixture origin. It does not enable control of arbitrary sites or a physical-device endpoint.
+
+
 ## Reclined viewing (0.12.0)
 
 **Recenter** starts a three-second countdown. Look where the video should face; the renderer captures the full head orientation, including upward pitch and side tilt. It keeps that orientation fixed while you look around naturally. **Position → Video tilt** adjusts the video up/down by up to 90 degrees relative to the captured centre without moving the controls. **Reset tilt** removes that adjustment; **Reset upright** levels the video with the room and keeps the controls facing you. Recenter clears manual tilt. Each new immersive session starts centred on the current head pose; quality changes preserve the current position.

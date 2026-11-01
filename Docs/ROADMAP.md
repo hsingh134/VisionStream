@@ -1,5 +1,12 @@
 # Prioritised engineering tasks — 0.6.1
 
+## Usability priorities after 0.13.0
+
+Implemented: eight in-memory tabs, independent page navigation, suspended background media, active-tab-only VR handoff, pinned favourites, local saved-page search, explicit address/search entry, Back/Forward history menus and Stop loading. Existing bookmarks migrate without being deleted or silently starred.
+
+Next priorities: opt-in tab restoration and undo-close with clear retention controls; private browsing using an isolated nonpersistent website store; per-site popup and permission controls; reliable hiding/showing of VR controls; and physical gaze/pinch, large-text, reclining and sustained multi-tab memory/thermal acceptance. These are outstanding work, not shipped features.
+
+
 ## 0.9.0 resource tracing and foreground save recovery
 
 The current implementation adds bounded checks of exact published HLS resources after selected native save failures. Reports correlate playlist/dependency/segment role, sequence, HTTP status and a per-session resource ID without exposing private URLs or credentials. Foreground range/header checks are labelled separately from native background traffic; a successful check does not prove the background request was equivalent.

@@ -5,18 +5,30 @@ import SwiftUI
     let page: URL?
     let title: String
     let open: (URL) -> Void
+    var openInTab: ((URL) -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var confirmReset = false
+    @State private var search = ""
+    private var filtered: [WebsiteBookmark] {
+        let values = preferences.favourites + preferences.bookmarks.filter { !preferences.favouriteIDs.contains($0.id) }
+        return search.isEmpty ? values : values.filter {
+            $0.name.localizedCaseInsensitiveContains(search) || $0.address.localizedCaseInsensitiveContains(search)
+        }
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            HStack { Text("Bookmarks").font(.title2.bold()); Spacer(); Button("Done") { dismiss() }.keyboardShortcut("w", modifiers: .command) }
+            HStack { Text("Favourites & bookmarks").font(.title2.bold()); Spacer(); Button("Done") { dismiss() }.keyboardShortcut("w", modifiers: .command) }
             if let page, WebsiteBookmark(name: title, address: page.absoluteString) != nil {
                 VStack(alignment: .leading, spacing: 10) {
                     TextField("Bookmark name", text: $name).textFieldStyle(.roundedBorder)
                     Text(page.absoluteString).font(.caption).foregroundStyle(.secondary).lineLimit(2).truncationMode(.middle)
-                    Button("Save this page", systemImage: "bookmark") { saveCurrentPage() }
-                        .disabled(preferences.hasDamagedBookmarks)
+                    HStack {
+                        Button("Add to favourites", systemImage: "star") {
+                            preferences.saveFavourite(name: name, address: page.absoluteString)
+                        }
+                        Button("Save this page", systemImage: "bookmark") { saveCurrentPage() }
+                    }.disabled(preferences.hasDamagedBookmarks)
                     Text("The page address, including any page identifiers, is saved on this headset.").font(.caption).foregroundStyle(.secondary)
                 }
                 Divider()
@@ -26,9 +38,10 @@ import SwiftUI
             if preferences.bookmarks.isEmpty {
                 ContentUnavailableView("No bookmarks", systemImage: "bookmark", description: Text("Open a website and save its page here."))
             } else {
+                TextField("Find a saved page", text: $search).textFieldStyle(.roundedBorder).autocorrectionDisabled()
                 ScrollView {
                     LazyVStack(spacing: 12) {
-                        ForEach(preferences.bookmarks) { bookmark in
+                        ForEach(filtered) { bookmark in
                             HStack {
                                 Button {
                                     if let url = BrowserAddress.resolve(bookmark.address) { dismiss(); open(url) }
@@ -38,14 +51,24 @@ import SwiftUI
                                         Text(URL(string: bookmark.address)?.host ?? "Website").font(.caption).foregroundStyle(.secondary)
                                     }.frame(maxWidth: .infinity, alignment: .leading)
                                 }.buttonStyle(.plain)
+                                .contextMenu {
+                                    if let openInTab, let url = URL(string: bookmark.address) {
+                                        Button("Open in new tab") { dismiss(); openInTab(url) }
+                                    }
+                                }
+                                Button {
+                                    preferences.setFavourite(bookmark, enabled: !preferences.favouriteIDs.contains(bookmark.id))
+                                } label: { Image(systemName: preferences.favouriteIDs.contains(bookmark.id) ? "star.fill" : "star") }
+                                    .accessibilityLabel((preferences.favouriteIDs.contains(bookmark.id) ? "Unpin " : "Favourite ") + bookmark.name)
                                 Button("Remove bookmark", systemImage: "trash", role: .destructive) { preferences.removeBookmark(bookmark) }.labelStyle(.iconOnly)
                                     .accessibilityLabel("Remove bookmark \(bookmark.name)")
                             }.padding().background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 16))
                         }
                     }
+                    if filtered.isEmpty { Text("No saved pages match your search.").foregroundStyle(.secondary).padding() }
                 }
             }
-        }.padding(28).frame(width: 680, height: 580).onAppear {
+        }.padding(28).frame(width: 680, height: 650).onAppear {
             name = String(title.unicodeScalars.prefix(120))
             #if targetEnvironment(simulator)
             if SimulatorScenarioRunner.isConfigured {
@@ -91,6 +114,8 @@ import SwiftUI
                 .foregroundStyle(.secondary)
             Text("Bookmarks and downloaded videos remain until you remove them. Clear website data in Browser options to sign out of websites and remove their stored data.")
                 .font(.callout).foregroundStyle(.secondary)
+            Text("Up to eight tabs stay open while VisionStream is running. Background tabs cannot play media. Tab lists are not saved when the app quits; your existing startup preference applies to the last active website. Favourites appear on Home and in the address box. Searches go to DuckDuckGo only after you submit them.")
+                .font(.caption).foregroundStyle(.secondary)
             Divider()
             Toggle("Detailed troubleshooting history",isOn:Binding(get:{ app.diagnosticsEnabled },set:app.setDiagnosticsEnabled))
             Text("When on, VisionStream stores website hosts and technical activity on this device. Private page links, passwords, cookies and video images are excluded. Nothing is uploaded automatically. Turning this off keeps older history until you delete it.").font(.caption).foregroundStyle(.secondary)

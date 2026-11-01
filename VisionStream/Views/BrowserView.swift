@@ -40,13 +40,26 @@ import SwiftUI
         VStack(spacing: 0) {
             HStack(spacing: 14) {
                 Button { browser.back() } label: { Image(systemName: "chevron.left") }.disabled(!browser.canGoBack).accessibilityLabel("Back")
+                    .help("Back · hold for recent pages")
+                    .contextMenu {
+                        ForEach(Array(browser.backPages.enumerated()), id: \.offset) { _, item in
+                            Button(item.title ?? item.url.host ?? "Page") { browser.go(to: item) }
+                        }
+                    }
                 Button { browser.forward() } label: { Image(systemName: "chevron.right") }.disabled(!browser.canGoForward).accessibilityLabel("Forward")
-                Button { browser.refresh() } label: { Image(systemName: "arrow.clockwise") }.accessibilityLabel("Refresh")
-                    .keyboardShortcut("r", modifiers: .command)
+                    .help("Forward · hold for recent pages")
+                    .contextMenu {
+                        ForEach(Array(browser.forwardPages.enumerated()), id: \.offset) { _, item in
+                            Button(item.title ?? item.url.host ?? "Page") { browser.go(to: item) }
+                        }
+                    }
+                Button { if browser.isLoading { browser.stopLoading() } else { browser.refresh() } } label: {
+                    Image(systemName: browser.isLoading ? "xmark" : "arrow.clockwise")
+                }.accessibilityLabel(browser.isLoading ? "Stop loading" : "Refresh")
                 Button {
                     openAddress()
                 } label: {
-                    Text(browser.address.isEmpty ? "Enter website address" : browser.address)
+                    Text(browser.address.isEmpty ? "Search or enter website" : browser.address)
                         .lineLimit(1).truncationMode(.middle)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -54,9 +67,20 @@ import SwiftUI
                 .keyboardShortcut("l", modifiers: .command)
                 .frame(minWidth: 220, maxWidth: .infinity)
                 Button("Home", systemImage: "house") { browser.showStartPage() }.labelStyle(.iconOnly)
-                Button("Bookmarks", systemImage: "bookmark") { showBookmarks = true }.labelStyle(.iconOnly)
+                Button {
+                    guard let url = browser.webView.url else { return }
+                    if let saved = browser.preferences.favourites.first(where: { $0.address == url.absoluteString }) {
+                        browser.preferences.setFavourite(saved, enabled: false)
+                    } else { browser.preferences.saveFavourite(name: browser.pageTitle, address: url.absoluteString) }
+                } label: { Image(systemName: browser.preferences.isFavourite(browser.webView.url) ? "star.fill" : "star") }
+                    .accessibilityLabel(browser.preferences.isFavourite(browser.webView.url) ? "Remove from favourites" : "Add to favourites")
+                    .help("Add or remove this page from favourites")
+                    .disabled(browser.isLoading || browser.webView.url.flatMap { WebsiteBookmark(name: browser.pageTitle, address: $0.absoluteString) } == nil)
+                Button("Favourites and bookmarks", systemImage: "bookmark") { showBookmarks = true }.labelStyle(.iconOnly)
+                    .keyboardShortcut("d", modifiers: .command)
                 Button("Downloads", systemImage: "arrow.down.circle") { showDownloads = true }
                 Menu {
+                    Button("Reload page", systemImage: "arrow.clockwise") { browser.refresh() }.keyboardShortcut("r", modifiers: .command)
                     Button("Open video link", systemImage: "link") { showStreamSheet = true }.keyboardShortcut("o", modifiers: .command)
                     Button("Find video sources",systemImage:"magnifyingglass") { showFinder=true }.keyboardShortcut("f",modifiers:[.command,.shift])
                     Button("Playback details",systemImage:"info.circle") { showDetails=true }.keyboardShortcut("d",modifiers:[.command,.shift])
@@ -65,10 +89,31 @@ import SwiftUI
                     Button("Browser settings", systemImage: "gearshape") { showSettings = true }
                     Button("How to watch", systemImage: "questionmark.circle") { showHelp = true }
                     Button("Clear website data…", systemImage: "hand.raised", role: .destructive) { confirmClearData = true }
+                    Divider()
+                    Button("Next tab") { app.tabs.selectAdjacent(1) }.keyboardShortcut("]", modifiers: [.command, .shift])
+                    Button("Previous tab") { app.tabs.selectAdjacent(-1) }.keyboardShortcut("[", modifiers: [.command, .shift])
                 } label: { Image(systemName: "ellipsis") }.accessibilityLabel("Browser options")
-            }.padding()
+            }.padding().disabled(app.tabs.isClearingWebsiteData)
+            BrowserTabStrip(tabs: app.tabs) {
+                if app.tabs.add() != nil { openAddress() }
+            }
+            if let message = app.tabs.message { Text(message).font(.callout).foregroundStyle(.orange).padding(.horizontal) }
+            if browser.isStartPage, !browser.preferences.favourites.isEmpty {
+                ScrollView(.horizontal) {
+                    HStack(spacing: 10) {
+                        ForEach(browser.preferences.favourites) { bookmark in
+                            Button { if let url = URL(string: bookmark.address) { browser.open(url) } } label: {
+                                Label(bookmark.name, systemImage: "star.fill").lineLimit(1)
+                            }.contextMenu {
+                                Button("Open in new tab") { if let url = URL(string: bookmark.address) { app.tabs.add(url: url) } }
+                                Button("Remove from favourites") { browser.preferences.setFavourite(bookmark, enabled: false) }
+                            }
+                        }
+                    }.padding(.horizontal, 16).padding(.bottom, 10)
+                }.scrollIndicators(.hidden).accessibilityLabel("Favourites")
+            }
             if browser.isLoading { ProgressView().progressViewStyle(.linear) }
-            BrowserWebView(browser: browser)
+            BrowserWebView(browser: browser).id(browser.id)
             if browser.message != nil || app.playback.errorMessage != nil {
                 VStack(alignment:.leading,spacing:8) {
                     if let message=browser.message { Text(message).foregroundStyle(.orange) }
@@ -125,17 +170,21 @@ import SwiftUI
         }
         .sheet(isPresented: $showAddressSheet) {
             VStack(alignment: .leading, spacing: 20) {
-                Text("Website address").font(.title2)
-                TextField("https://example.com", text: $addressDraft)
+                Text("Address or search").font(.title2)
+                TextField("Website address or search words", text: $addressDraft)
                     .textFieldStyle(.roundedBorder).textInputAutocapitalization(.never).autocorrectionDisabled()
-                    .keyboardType(.URL).submitLabel(.go).focused($addressFocused)
+                    .keyboardType(.webSearch).submitLabel(BrowserInput.isSearch(addressDraft) ? .search : .go).focused($addressFocused)
                     .onSubmit { navigateToDraft() }
+                if BrowserInput.isSearch(addressDraft) {
+                    Text("Search with DuckDuckGo. Your search is sent only when you choose Search.").font(.caption).foregroundStyle(.secondary)
+                }
+                addressSuggestions
                 HStack {
                     Button("Cancel") { showAddressSheet = false }.keyboardShortcut("w", modifiers: .command)
                     Spacer()
-                    Button("Go") { navigateToDraft() }
+                    Button(BrowserInput.isSearch(addressDraft) ? "Search" : "Go") { navigateToDraft() }
                         .buttonStyle(.borderedProminent)
-                        .disabled(BrowserAddress.resolve(addressDraft) == nil)
+                        .disabled(BrowserInput.destination(addressDraft) == nil)
                 }
             }.padding(30).frame(width: 620).simulatorPanel(.address)
                 .onAppear { addressFocused = true }
@@ -171,7 +220,7 @@ import SwiftUI
         .sheet(isPresented: $showBookmarks) {
             BookmarksView(preferences: app.browser.preferences,
                           page: app.browser.isLoading ? nil : app.browser.webView.url,
-                          title: app.browser.webView.title ?? "Website", open: { app.browser.open($0) })
+                          title: app.browser.webView.title ?? "Website", open: { app.browser.open($0) }, openInTab: { app.tabs.add(url: $0) })
         }
         .sheet(isPresented: $showSettings) { BrowserSettingsView(app:app,preferences: app.browser.preferences, currentPage: app.browser.webView.url) }
         .sheet(isPresented: $showHelp) {
@@ -189,9 +238,9 @@ import SwiftUI
             }.padding(30).frame(width: 620)
         }
         .confirmationDialog("Clear website data?", isPresented: $confirmClearData, titleVisibility: .visible) {
-            Button("Clear website data", role: .destructive) { Task { await app.browser.clearWebsiteData() } }
+            Button("Clear website data", role: .destructive) { Task { await app.tabs.clearWebsiteData() } }
             Button("Cancel", role: .cancel) { }
-        } message: { Text("This signs you out of websites and clears their cookies and stored data. Your downloaded videos and bookmarks stay on this headset.") }
+        } message: { Text("This resets all open tabs to Home and signs you out of websites. Downloaded videos, favourites and bookmarks stay on this headset.") }
         .sheet(isPresented: $showLibrary) {
             VRLibraryView(app: app, watch: watchLibraryStream)
         }
@@ -207,8 +256,13 @@ import SwiftUI
         .onChange(of: showSettings) { _, visible in app.history.record(.controls,labels:["action":visible ? "settings-opened":"settings-closed"]) }
         .onChange(of: showBookmarks) { _, visible in app.history.record(.controls,labels:["action":visible ? "bookmarks-opened":"bookmarks-closed"]) }
         .onChange(of: scenePhase, initial: true) { _, phase in observeScene(phase) }
+        .onChange(of: app.tabs.activeID) { _, _ in
+            cancel(); selectedID = nil; pendingDownload = nil
+            showFinder = false; showLibrary = false; showFormat = false
+            app.browser.startIfNeeded()
+        }
         .onAppear { app.browserWindowVisible = true; startBrowser() }
-        .onDisappear { app.browserWindowVisible = false; browserIsActive = false; if !app.playback.immersiveActive && !app.playback.openingImmersive { app.browser.onUserPlayback=nil;cancel() } }
+        .onDisappear { app.browserWindowVisible = false; browserIsActive = false; if !app.playback.immersiveActive && !app.playback.openingImmersive { app.tabs.onUserPlayback=nil;cancel() } }
         .onChange(of: browser.dialog?.id) { _, _ in dialogText = browser.dialog?.defaultText ?? "" }
         .alert("Website dialog", isPresented: Binding(get: { browser.dialog != nil }, set: { if !$0 { browser.finishDialog(nil) } })) {
             if let dialog = browser.dialog {
@@ -236,15 +290,41 @@ import SwiftUI
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
+    private var addressSuggestions: some View {
+        let query = addressDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let preferences = app.tabs.preferences
+        let matches = query.isEmpty ? preferences.favourites : preferences.bookmarks.filter {
+            $0.name.localizedCaseInsensitiveContains(query) || $0.address.localizedCaseInsensitiveContains(query)
+        }
+        return Group {
+            if !matches.isEmpty {
+                Text(query.isEmpty ? "Favourites" : "Saved pages").font(.headline)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(Array(matches.prefix(6))) { bookmark in
+                            Button {
+                                showAddressSheet = false
+                                if let url = URL(string: bookmark.address) { app.browser.open(url) }
+                            } label: {
+                                Label(bookmark.name, systemImage: preferences.favouriteIDs.contains(bookmark.id) ? "star.fill" : "bookmark")
+                                    .frame(maxWidth: .infinity, alignment: .leading).lineLimit(1)
+                            }
+                        }
+                    }
+                }.frame(maxHeight: 200)
+            }
+        }
+    }
     private func download(_ media: MediaCandidate) {
         if showFinder { pendingDownload = media; showFinder = false; return }
         let contextual = media.withBrowserFormatContext(page: BrowserAddress.resolve(app.browser.address), title: app.browser.webView.title ?? "", candidates: app.browser.candidates)
+        let sourceBrowser = app.browser
         showDownloads = true
         Task { @MainActor [app] in
             guard let url = URL(string: contextual.source) else { return }
-            let cookies = await app.browser.cookies(for: url)
-            let agent = await app.browser.playbackUserAgent()
-            app.enqueueSave(contextual,cookies:cookies,userAgent:agent,cookieProvider: { [weak app] in await app?.browser.cookies(for:$0) ?? [] })
+            let cookies = await sourceBrowser.cookies(for: url)
+            let agent = await sourceBrowser.playbackUserAgent()
+            app.enqueueSave(contextual,cookies:cookies,userAgent:agent,cookieProvider: { [weak sourceBrowser] in await sourceBrowser?.cookies(for:$0) ?? [] })
         }
     }
     private func watchSaved(_ video: SavedVideo) {
@@ -263,7 +343,7 @@ import SwiftUI
         #endif
     }
     private func startBrowser() {
-        app.browser.onUserPlayback = { media in
+        app.tabs.onUserPlayback = { media in
             guard browserIsActive, !showAddressSheet, !showStreamSheet, !showLibrary, !showFinder,
                   !showDownloads, !showDetails, !showBookmarks, !showSettings, !showHelp, !confirmClearData,
                   app.browser.dialog == nil, !app.playback.isPreparing, !app.playback.openingImmersive,
@@ -298,7 +378,7 @@ import SwiftUI
     }
 
     private func navigateToDraft() {
-        guard let url = BrowserAddress.resolve(addressDraft) else { return }
+        guard let url = BrowserInput.destination(addressDraft) else { return }
         showAddressSheet = false
         app.browser.open(url)
     }
@@ -327,7 +407,8 @@ import SwiftUI
         guard !app.playback.openingImmersive, !app.playback.immersiveActive else { return }
         cancel()
         let token = UUID(); operation = token
-        let navigationVersion = app.browser.navigationVersion
+        let sourceBrowser = app.browser
+        let navigationVersion = sourceBrowser.navigationVersion
         // Reserve the transition before awaiting cookies to prevent double launches.
         app.playback.openingImmersive = true
         preparingTask = Task { @MainActor in
@@ -339,20 +420,20 @@ import SwiftUI
                 ready = await app.playback.prepareSavedHLS(savedHLS, store: app.hlsDownloads.store)
             } else {
                 guard let url = URL(string: media.source) else { return }
-                let cookies = await app.browser.cookies(for: url)
-                guard !Task.isCancelled, operation == token, app.browser.navigationVersion == navigationVersion else { return }
-                let userAgent = await app.browser.playbackUserAgent()
-                guard !Task.isCancelled, operation == token, app.browser.navigationVersion == navigationVersion else { return }
-                ready = await app.playback.prepare(media, cookies: cookies, userAgent: userAgent, cookieProvider: { [weak browser = app.browser] url in await browser?.cookies(for: url) ?? [] })
+                let cookies = await sourceBrowser.cookies(for: url)
+                guard !Task.isCancelled, operation == token, app.browser === sourceBrowser, sourceBrowser.navigationVersion == navigationVersion else { return }
+                let userAgent = await sourceBrowser.playbackUserAgent()
+                guard !Task.isCancelled, operation == token, app.browser === sourceBrowser, sourceBrowser.navigationVersion == navigationVersion else { return }
+                ready = await app.playback.prepare(media, cookies: cookies, userAgent: userAgent, cookieProvider: { [weak sourceBrowser] url in await sourceBrowser?.cookies(for: url) ?? [] })
             }
             guard ready, !Task.isCancelled, operation == token else { return }
-            guard app.browser.navigationVersion == navigationVersion else { app.playback.stop(); return }
+            guard app.browser === sourceBrowser, sourceBrowser.navigationVersion == navigationVersion else { app.playback.stop(); return }
             guard !Task.isCancelled, operation == token, app.playback.isReady else { return }
             let result = await openImmersiveSpace(id: "video")
             // Navigation/cancellation can occur while visionOS opens the space.
             // Never hide the newer page or leave an empty immersive experience.
             guard !Task.isCancelled, operation == token,
-                  app.browser.navigationVersion == navigationVersion, app.playback.isReady else {
+                  app.browser === sourceBrowser, sourceBrowser.navigationVersion == navigationVersion, app.playback.isReady else {
                 if case .opened = result { await dismissImmersiveSpace() }
                 return
             }
@@ -360,9 +441,9 @@ import SwiftUI
             case .opened:
                 // Keep an exit control available even if the website is slow to pause.
                 // A refused/cancelled system transition must not pause the page.
-                await app.browser.pausePageVideo(media)
+                await sourceBrowser.pausePageVideo(media)
                 guard !Task.isCancelled, operation == token,
-                      app.browser.navigationVersion == navigationVersion, app.playback.isReady else {
+                      app.browser === sourceBrowser, sourceBrowser.navigationVersion == navigationVersion, app.playback.isReady else {
                     await dismissImmersiveSpace(); return
                 }
                 // The immersive view owns the controls attachment. Close this

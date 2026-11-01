@@ -1,7 +1,15 @@
 # Installation and signing
 
-Current 0.12.0 release preparation is documented in `Submission/README.md`. Building and simulator tests are free. A free Apple Account can use Xcode Personal Team for personal device testing with seven-day provisioning; App Store/TestFlight distribution requires paid membership. The supplied device archive remains unsigned until you configure your own team. No purchase or enrollment is performed by this project. Keep the `VisionStream` scheme for the existing personal installation; `VisionStream-AppStore` is separate distribution preparation. Public policy/contact and encryption answers are deliberately not invented.
+Current 0.11.0 release preparation is documented in `Submission/README.md`. Building and simulator tests are free. A free Apple Account can use Xcode Personal Team for personal device testing with seven-day provisioning; App Store/TestFlight distribution requires paid membership. The supplied device archive remains unsigned until you configure your own team. No purchase or enrollment is performed by this project. Keep the `VisionStream` scheme for the existing personal installation; `VisionStream-AppStore` is separate distribution preparation. Public policy/contact and encryption answers are deliberately not invented.
 
+
+## Browser tabs and favourites (0.13.0)
+
+Use + to create a tab, select a tab title to switch, and its x to close it. Each tab keeps its own page and Back/Forward stack. Closing the final tab creates a clean Home tab and clears startup restoration. Tabs are not persisted across process restarts; website sessions still share the normal persistent WebKit store. This is not private browsing.
+
+The star beside the address adds/removes the current page from favourites. Favourites appear above Home and in empty address entry; the bookmark control opens the searchable Favourites & bookmarks list. Existing bookmarks are preserved and can be pinned with their row’s star. Search words in address entry are labelled as a DuckDuckGo search before submission; there are no remote typing suggestions. Hold Back or Forward for recent pages in that tab.
+
+Keyboard: Command-L address, Command-T new tab, Command-W close, Command-D saved pages, Command-Shift-[ / ] previous/next tab. Website data clearing resets all tabs to Home and signs out across their shared store.
 
 ## Requirements
 
@@ -9,7 +17,7 @@ Current 0.12.0 release preparation is documented in `Submission/README.md`. Buil
 - Vision Pro running visionOS 26+ for the final stereo/tracking checks.
 - An Apple account configured in Xcode. Device installation needs a team and a provisioning profile permitted for that device.
 
-This checkout contains a complete `.xcodeproj`, shared scheme, test target, Info.plist, configuration files, shader, JavaScript, resources and the bundled `Vendor/` runtime/packages. No project-generation tool is needed to open it. Version 0.3.0's Find streams feature runs on Vision Pro; no Mac companion or desktop yt-dlp installation is required for playback. Run `python3 Scripts/prepare_embedded_extractor.py` before opening the project: the public repository intentionally fetches the pinned extractor packages instead of checking them into Git. See [on-device dependency/licence details](ON_DEVICE_EXTRACTION.md).
+This checkout contains a complete `.xcodeproj`, shared scheme, test target, Info.plist, configuration files, shader, JavaScript, resources and the bundled `Vendor/` runtime/packages. No project-generation tool is needed to open it. Version 0.3.0's Find streams feature runs on Vision Pro; no Mac companion or desktop yt-dlp installation is required for playback. Run `python3 Scripts/prepare_embedded_extractor.py` before building a fresh public checkout. The public source omits extractor packages and restores their exact checksum-pinned versions through this script. See [on-device dependency/licence details](ON_DEVICE_EXTRACTION.md).
 
 ## Signing
 

@@ -3,7 +3,12 @@ import Observation
 import WebKit
 
 @MainActor @Observable
-final class BrowserModel: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
+final class BrowserModel: NSObject, Identifiable, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
+    let id = UUID()
+    private(set) var pageTitle = "New tab"
+    private(set) var isStartPage = true
+    private(set) var isActiveTab = true
+    private let restoreOnStart: Bool
     @ObservationIgnored weak var diagnostics: SessionDiagnostics?
     private(set) var diagnosticContext: DiagnosticContext?
     let preferences: BrowserPreferences
@@ -30,24 +35,45 @@ final class BrowserModel: NSObject, WKNavigationDelegate, WKUIDelegate, WKScript
     @ObservationIgnored private let cookieSnapshot:BrowserCookieSnapshot
     var onNavigation: (() -> Void)?
     var onUserPlayback: ((MediaCandidate) -> Void)?
+    var onOpenNewTab: ((URL) -> Void)?
     @ObservationIgnored private var automaticPlayback=AutomaticPlayback()
     @ObservationIgnored private var navigationStartedAt=Date()
 
     func clearWebsiteData() async {
-        cookieSnapshot.clear()
+        resetForWebsiteDataClear()
         diagnostics?.record(.controls,context:diagnosticContext,labels:["action":"clear-website-data"])
-        webView.stopLoading()
-        showStartPage()
         await dataStore.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast)
         cookieSnapshot.clear() // Invalidate reads that overlapped the platform deletion.
         preferences.clearRestoration()
         message = "Website data cleared. You have been signed out of websites."
     }
 
+    func invalidateCookieSnapshot() { cookieSnapshot.clear() }
+    func resetForWebsiteDataClear() { cookieSnapshot.clear(); webView.stopLoading(); showStartPage() }
+
+    func setTabActive(_ active: Bool) {
+        isActiveTab = active
+        automaticPlayback = AutomaticPlayback()
+        navigationStartedAt = Date() // Old page gestures cannot replay on tab activation.
+        // Queue transitions directly on WebKit, in order, even during rapid tab switches.
+        webView.setAllMediaPlaybackSuspended(!active, completionHandler: nil)
+        if !active { finishDialog(nil) }
+        else if let url = webView.url { preferences.remember(url) }
+    }
+
+    func closeTab() {
+        setTabActive(false); webView.stopLoading(); acceptsMediaReports = false
+        webView.navigationDelegate = nil; webView.uiDelegate = nil
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: "visionStream", contentWorld: .defaultClient)
+        observations.removeAll(); clearCandidates()
+        onNavigation = nil; onUserPlayback = nil; onOpenNewTab = nil
+    }
+
     override convenience init() { self.init(preferences: BrowserPreferences()) }
 
-    init(preferences: BrowserPreferences) {
+    init(preferences: BrowserPreferences, restoreOnStart: Bool = true) {
         self.preferences = preferences
+        self.restoreOnStart = restoreOnStart
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()
         config.allowsInlineMediaPlayback = true
@@ -81,10 +107,15 @@ final class BrowserModel: NSObject, WKNavigationDelegate, WKUIDelegate, WKScript
             },
             webView.observe(\.url, options: [.new]) { [weak self] _, _ in
                 Task { @MainActor in
-                    guard let self, let url = self.webView.url, ["https", "http"].contains(url.scheme ?? "") else { return }
+                    guard let self, let url = self.webView.url else { return }
+                    self.isStartPage = url.isFileURL
+                    guard ["https", "http"].contains(url.scheme ?? "") else { self.address = ""; return }
                     self.address = url.absoluteString
-                    self.preferences.remember(url)
+                    if self.isActiveTab { self.preferences.remember(url) }
                 }
+            },
+            webView.observe(\.title, options: [.new]) { [weak self] _, _ in
+                Task { @MainActor in self?.syncTitle() }
             }
         ]
     }
@@ -94,7 +125,7 @@ final class BrowserModel: NSObject, WKNavigationDelegate, WKUIDelegate, WKScript
     // and never replace a navigation that has already been explicitly requested.
     func startIfNeeded() {
         guard !hasStartedBrowsing else { return }
-        if let url = preferences.restoredURL {
+        if restoreOnStart, let url = preferences.restoredURL {
             open(url)
         } else { showStartPage() }
     }
@@ -104,6 +135,7 @@ final class BrowserModel: NSObject, WKNavigationDelegate, WKUIDelegate, WKScript
             message = "Enter a website address such as https://example.com."; return
         }
         invalidateForNavigation()
+        isStartPage = false
         webView.load(URLRequest(url: url))
     }
 
@@ -111,12 +143,20 @@ final class BrowserModel: NSObject, WKNavigationDelegate, WKUIDelegate, WKScript
     func back() { guard webView.canGoBack else { return }; diagnostics?.record(.controls,context:diagnosticContext,labels:["action":"back"]); invalidateForNavigation(); webView.goBack() }
     func forward() { guard webView.canGoForward else { return }; diagnostics?.record(.controls,context:diagnosticContext,labels:["action":"forward"]); invalidateForNavigation(); webView.goForward() }
     func refresh() { guard webView.url != nil else { return }; diagnostics?.record(.controls,context:diagnosticContext,labels:["action":"refresh"]); invalidateForNavigation(); webView.reload() }
+    func stopLoading() { webView.stopLoading(); isLoading = false }
+    var backPages: [WKBackForwardListItem] { Array(webView.backForwardList.backList.reversed().prefix(12)) }
+    var forwardPages: [WKBackForwardListItem] { Array(webView.backForwardList.forwardList.prefix(12)) }
+    func go(to item: WKBackForwardListItem) {
+        guard (webView.backForwardList.backList + webView.backForwardList.forwardList).contains(where: { $0 === item }) else { return }
+        invalidateForNavigation(); webView.go(to: item)
+    }
 
     func showStartPage() {
         guard let url = Bundle.main.url(forResource: "Start", withExtension: "html") else {
             message = "The start page is missing from the app bundle."; return
         }
         invalidateForNavigation()
+        isStartPage = true; pageTitle = "New tab"
         webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
         address = ""
     }
@@ -195,7 +235,7 @@ final class BrowserModel: NSObject, WKNavigationDelegate, WKUIDelegate, WKScript
             }
             return document(URL(string:media.pageURL)) == document(webView.url)
         }
-        if let media=automaticPlayback.next(in:eligible,navigation:navigationVersion,pageAge:Date().timeIntervalSince(navigationStartedAt),enabled:preferences.openVideosInVR) {
+        if let media=automaticPlayback.next(in:eligible,navigation:navigationVersion,pageAge:Date().timeIntervalSince(navigationStartedAt),enabled:isActiveTab && preferences.openVideosInVR) {
             diagnostics?.record(.controls,context:diagnosticContext,labels:["action":"webpage-play-native-handoff"])
             onUserPlayback?(media)
         }
@@ -258,7 +298,11 @@ final class BrowserModel: NSObject, WKNavigationDelegate, WKUIDelegate, WKScript
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
                  for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
         if navigationAction.targetFrame == nil, let url = navigationAction.request.url,
-           ["http", "https"].contains(url.scheme ?? "") { invalidateForNavigation(); webView.load(navigationAction.request) }
+           BrowserAddress.resolve(url.absoluteString) != nil {
+            if navigationAction.navigationType == .linkActivated, isActiveTab, let onOpenNewTab {
+                onOpenNewTab(url)
+            } else { invalidateForNavigation(); webView.load(navigationAction.request) }
+        }
         return nil
     }
 
@@ -280,12 +324,18 @@ final class BrowserModel: NSObject, WKNavigationDelegate, WKUIDelegate, WKScript
         pending?.completion(response)
     }
     private func presentDialog(_ value: WebsiteDialog) {
+        guard isActiveTab else { value.completion(nil); return }
         finishDialog(nil); dialog = value
         diagnostics?.record(.navigation,context:diagnosticContext,labels:["phase":"website-dialog","mode":String(describing:value.kind)])
     }
 
     private func syncNavigation() {
         canGoBack = webView.canGoBack; canGoForward = webView.canGoForward; isLoading = webView.isLoading
+        syncTitle()
+    }
+    private func syncTitle() {
+        let raw = isStartPage ? "New tab" : (webView.title?.isEmpty == false ? webView.title! : (webView.url?.host ?? "Website"))
+        pageTitle = String(raw.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) }.prefix(160))
     }
     private func clearCandidates() {
         if !candidates.isEmpty { diagnostics?.record(.mediaState,context:diagnosticContext,labels:["phase":"page-sources-cleared"],numbers:["candidateCount":Double(candidates.count)]) }

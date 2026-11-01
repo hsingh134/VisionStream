@@ -2,13 +2,15 @@
 
 A native web browser and immersive video player for Apple Vision Pro. Browse a website, start a compatible video and open it in a native Screen, VR180 or VR360 viewer.
 
-**Current version: 0.12.0 · Early source release · visionOS 26+**
+**Current version: 0.13.0 · Early source release · visionOS 26+**
 
 VisionStream has automated simulator coverage on visionOS 26 and 27 and has been installed on a physical Vision Pro. Physical-headset playback, comfort and broad website compatibility still need testing. It is not currently available through the App Store or TestFlight.
 
 ## Features
 
-- WebKit browser with persistent website sessions, bookmarks and normal navigation.
+- Up to eight tabs with independent pages and navigation history, plus persistent website sessions.
+- One-touch favourites on Home and in address entry, searchable bookmarks, and Back/Forward history menus.
+- Address or DuckDuckGo search entry with local saved-page suggestions; no remote typing suggestions.
 - Automatic native opening after a recognised website Play action, with a manual Watch in VR fallback.
 - Compatible MP4 and HLS streaming directly on Vision Pro; no Mac companion is needed during use.
 - Equirectangular VR180/VR360 and flat-screen playback, with mono, side-by-side and top/bottom eye layouts.
@@ -20,9 +22,10 @@ VisionStream has automated simulator coverage on visionOS 26 and 27 and has been
 
 ## Screenshots
 
-These are genuine visionOS Simulator captures using the bundled home page and original CC0 calibration clips. They are not physical-headset photos or evidence of support for a third-party site.
+These are genuine visionOS Simulator captures using the bundled home page and original CC0 calibration clips. Browser/favourites images are from 0.13.0; the Downloads and immersive-controls images below remain from 0.12.0. They are not physical-headset photos or evidence of support for a third-party site.
 
-![Browser home](Submission/Reddit/Screenshots/01-browser.png)
+![Tabs and Home favourites — 0.13.0](Submission/Reddit/Screenshots/0.13.0/tabs-favourites.png)
+![Searchable favourites and bookmarks — 0.13.0](Submission/Reddit/Screenshots/0.13.0/favourites-list.png)
 ![Downloads with a saved calibration video](Submission/Reddit/Screenshots/02-downloads.png)
 ![Immersive playback and format controls](Submission/Reddit/Screenshots/03-immersive-controls.png)
 
@@ -41,6 +44,14 @@ There is currently **no universally installable signed download**. Each person b
 A free Apple Account can be used for personal device testing, subject to Apple's limits and seven-day provisioning. Rebuild/reinstall after the profile expires. TestFlight/App Store distribution requires the appropriate Apple Developer Program membership and remaining release work. See [installation details](Docs/INSTALLATION.md).
 
 Use a network that allows the Mac and headset to communicate. Hotel/guest Wi-Fi can prevent development discovery or connections. A phone hotspot may be an alternative.
+
+## Tabs and favourites
+
+Use **+** for a new tab, select its title to switch and **×** to close it. Tabs share website logins. Background-tab media is suspended, but other website activity may continue. Tab lists remain in memory and are not restored after quitting; the existing startup preference still applies to the last active website. Closing the final tab creates a clean Home tab and clears remembered startup navigation.
+
+Star a page beside the address to add/remove a favourite. Home and empty address entry show favourites; the bookmark button opens the searchable saved-page list. Existing bookmarks stay intact and can be starred. Hold Back/Forward to jump to a recent page in the current tab.
+
+Keyboard: **⌘L** address, **⌘T** new tab, **⌘W** close tab, **⌘D** saved pages, **⌘⇧[ / ]** previous/next tab. Address entry labels search submissions to DuckDuckGo; invalid explicit URLs and URLs containing credentials do not fall back to search.
 
 ## First playback
 
