@@ -1,5 +1,14 @@
 # Verification record
 
+## Playback notice clarification 0.14.1 (1 November 2026)
+
+The browser now labels native errors **VisionStream playback** and provides a dismiss action that preserves failure stage, numeric codes, attempted candidate and reason. Native failure evidence previously remained on the same page until another native attempt or navigation, which could make refresh appear necessary to clear an old warning. This identifies a UI ambiguity; it does not diagnose the user's intermittent live Pornhub transport or codec failure.
+
+Focused native tests: **8 pass on visionOS 26 and 27**, zero failures/skips each. The new regression starts real webpage playback, attempts invalid native media, verifies the webpage remains playing and advancing without refresh, then dismisses the native notice and checks its failure evidence remains. The existing webpage MP4/HLS playback/error tests and navigation diagnostic clearing also pass. Mounted forms, unsupported-native and controls-hide scenes pass **28 checks per runtime**. These are focused checks after a small notice change; the full 0.14.0 suites below were not rerun for this patch.
+
+Signed **0.14.1 (36)** is verified installed on the physical headset without launching a retained private page. No new private website request, live-site reproduction or physical gaze/pinch acceptance is claimed. Private evidence: `TestResults/playback-notice-0.14.1/matrix.json`.
+
+
 ## Hidden controls and first-attempt recovery 0.14.0 (1 November 2026)
 
 - Final full native suites on visionOS 26.0 and 27.0: **200 pass, 12 optional skips, zero failures per runtime** (212 methods). The new teardown regression repeatedly closes a renderer near texture/layout changes and waits for its release. Core suite: **99 pass**; standalone: **93 methods / 1,838 assertions**; HTTPS fixtures: **19 pass**; automation evidence validation: **4 pass**.

@@ -117,7 +117,19 @@ import SwiftUI
             if browser.message != nil || app.playback.errorMessage != nil {
                 VStack(alignment:.leading,spacing:8) {
                     if let message=browser.message { Text(message).foregroundStyle(.orange) }
-                    if let error=app.playback.errorMessage { Text(error).foregroundStyle(.orange) }
+                    if let error=app.playback.errorMessage {
+                        HStack(alignment: .top, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("VisionStream playback").fontWeight(.semibold)
+                                Text(error)
+                                Text("Website playback is separate. You can try the website’s own Play button.")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer(minLength: 0)
+                            Button("Dismiss playback error", systemImage: "xmark") { app.playback.dismissError() }
+                                .labelStyle(.iconOnly)
+                        }.foregroundStyle(.orange)
+                    }
                 }.font(.callout).frame(maxWidth:.infinity,alignment:.leading).padding()
             }
             if videoBarVisible {

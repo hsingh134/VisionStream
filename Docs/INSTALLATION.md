@@ -3,6 +3,10 @@
 Current 0.11.0 release preparation is documented in `Submission/README.md`. Building and simulator tests are free. A free Apple Account can use Xcode Personal Team for personal device testing with seven-day provisioning; App Store/TestFlight distribution requires paid membership. The supplied device archive remains unsigned until you configure your own team. No purchase or enrollment is performed by this project. Keep the `VisionStream` scheme for the existing personal installation; `VisionStream-AppStore` is separate distribution preparation. Public policy/contact and encryption answers are deliberately not invented.
 
 
+## Playback notices (0.14.1)
+
+The browser's **VisionStream playback** notice describes a native-player attempt, including automatic opening after a website Play action. It is separate from the webpage player's status and can remain after a failed attempt on the same page. Choose **Dismiss playback error** to hide it without refreshing; Playback details retains the diagnostic evidence. A warning that lists codecs among several possible causes does not confirm a missing codec.
+
 ## Immersive controls (0.14.0)
 
 During moving playback, the panel hides after five seconds without interaction. Tap the video once (look at the video and pinch on Vision Pro) to show it; tap the video again or choose **Hide controls** to hide it. Each reveal places the panel just below your current head-facing direction without recentering the video. This follows head orientation rather than tracking your eye gaze. The panel remains still while visible and stays visible when paused, buffering or adjusting an expanded setting or seek slider. Physical gaze/pinch delivery and reclining comfort still need acceptance on a headset.

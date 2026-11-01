@@ -555,6 +555,13 @@ final class PlaybackModel {
 
     func cancelPreparation() { if isPreparing || (isReady && !immersiveActive) { stop() } }
 
+    /// Hide the notice without erasing evidence needed by Playback details.
+    func dismissError() {
+        guard errorMessage != nil else { return }
+        trace(.controls, action: "playback-error-dismissed")
+        errorMessage = nil
+    }
+
     func resetDiagnosticsWhenIdle() {
         guard !isPreparing, !isReady, !immersiveActive else { return }
         diagnosticStage = "not-attempted"; failureCodes = []; mediaHTTPStatus = nil; errorMessage = nil

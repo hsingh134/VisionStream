@@ -1,4 +1,5 @@
 import RealityKit
+import UIKit
 import XCTest
 @testable import VisionStream
 
@@ -71,6 +72,39 @@ import XCTest
             while released != nil, Date() < releaseEnd { try await Task.sleep(for: .milliseconds(10)) }
             XCTAssertNil(released, "Completed GPU commands must release the renderer after scene dismissal")
         }
+    }
+    func testFailedNativeAttemptDoesNotStopWebpageAndDismissKeepsEvidence() async throws {
+        let origin = try XCTUnwrap(ProcessInfo.processInfo.environment["VISIONSTREAM_TEST_ORIGIN"].flatMap(URL.init(string:)))
+        let browser = BrowserModel()
+        let playback = PlaybackModel(preparationTimeout: .seconds(8))
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = try XCTUnwrap(scene.windows.first { !$0.isHidden })
+        browser.webView.frame = window.bounds; window.addSubview(browser.webView)
+        defer { browser.webView.removeFromSuperview(); browser.closeTab(); playback.stop() }
+        browser.open(origin.appendingPathComponent("web-playback-test"))
+        var end = Date().addingTimeInterval(15)
+        while browser.isLoading || browser.candidates.isEmpty, Date() < end { try await Task.sleep(for: .milliseconds(50)) }
+        let started = try await browser.webView.callAsyncJavaScript("await document.querySelector('video').play();return true", in: nil, contentWorld: .page) as? Bool
+        XCTAssertEqual(started, true)
+        let before = try await browser.webView.evaluateJavaScript("document.querySelector('video').currentTime") as? Double ?? 0
+        let ready = await playback.prepare(MediaCandidate(id: "bad-native", source: origin.appendingPathComponent("download-invalid-mp4.mp4").absoluteString), cookies: [])
+        XCTAssertFalse(ready); XCTAssertNotNil(playback.errorMessage)
+        let stage = playback.diagnosticStage, codes = playback.failureCodes, reason = playback.failureReason
+        XCTAssertTrue(stage.hasPrefix("failed-at-"))
+        let stillPlaying = try await browser.webView.evaluateJavaScript("!document.querySelector('video').paused && !document.querySelector('video').error") as? Bool
+        XCTAssertEqual(stillPlaying, true)
+        playback.dismissError()
+        XCTAssertNil(playback.errorMessage)
+        XCTAssertEqual(playback.diagnosticStage, stage); XCTAssertEqual(playback.failureCodes, codes)
+        XCTAssertEqual(playback.failureReason, reason); XCTAssertEqual(playback.diagnosticCandidate?.id, "bad-native")
+        end = Date().addingTimeInterval(5)
+        var advanced = false
+        while !advanced, Date() < end {
+            let now = try await browser.webView.evaluateJavaScript("document.querySelector('video').currentTime") as? Double ?? 0
+            advanced = now > before + 0.1
+            if !advanced { try await Task.sleep(for: .milliseconds(50)) }
+        }
+        XCTAssertTrue(advanced, "The webpage can continue without refreshing after native playback failed")
     }
     func testControlsTimerKeepsInteractionAndPausedVideoVisible() {
         let controls = ImmersiveControlsModel()
