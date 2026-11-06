@@ -49,6 +49,7 @@ final class ImmersiveRenderer: NSObject {
     private var didCenter = false
     private var lastRecenter = -1
     private var lastControlsPlacement = -1
+    private var lastControlsDistance: Double?
     private var viewingPose = ViewingPose()
     private var lastProjection: VideoProjection?
     private var lastFlatScreen: Bool?
@@ -88,7 +89,7 @@ final class ImmersiveRenderer: NSObject {
         try rebuildMesh()
         // A hollow inward-facing mesh is hittable from inside the panorama.
         // Keep it behind the attachment so it cannot steal taps on its buttons.
-        let inputMesh = ProjectionMesh.generate(projection: .vr360, columns: 32, rows: 16, radius: 6)
+        let inputMesh = ProjectionMesh.generate(projection: .vr360, columns: 32, rows: 16, radius: 10)
         let shape = try await ShapeResource.generateStaticMesh(positions: inputMesh.positions, faceIndices: inputMesh.indices.map(UInt16.init))
         guard token == currentToken, !Task.isCancelled else { return }
         inputSurface.name = "Show or hide playback controls"
@@ -338,21 +339,30 @@ final class ImmersiveRenderer: NSObject {
         if !didCenter || lastRecenter != playback.recenterID {
             viewingPose.recenter(head: transform, upright: playback.recenterUpright)
             video.position = position
-            controls.position = viewingPose.controlsPosition(viewer: position)
+            controls.position = viewingPose.controlsPosition(viewer: position, distance: playback.controlsDistance)
             controls.orientation = viewingPose.controlsOrientation
             lastRecenter = playback.recenterID; didCenter = true
         }
         if lastControlsPlacement != playback.controls.placementID {
             viewingPose.placeControls(head: transform)
-            controls.position = viewingPose.controlsPosition(viewer: position)
+            controls.position = viewingPose.controlsPosition(viewer: position, distance: playback.controlsDistance)
             controls.orientation = viewingPose.controlsOrientation
             lastControlsPlacement = playback.controls.placementID
         }
+        if lastControlsDistance != playback.controlsDistance {
+            controls.position = viewingPose.controlsPosition(viewer: position, distance: playback.controlsDistance)
+            controls.scale = SIMD3<Float>(repeating: ViewingPose.controlsScale(distance: playback.controlsDistance))
+            lastControlsDistance = playback.controlsDistance
+        }
+        // Keep the flat screen behind the panel without changing its angular size.
+        let screenScale = max(1, Float((playback.controlsDistance + 0.4) / 2.4))
+        video.scale = SIMD3<Float>(repeating: playback.flatScreen ? screenScale : 1)
         // Manual tilt rotates the video around its captured local right axis.
         // Controls stay reachable while adjusting it, rather than following the slider.
         video.orientation = viewingPose.videoOrientation(tiltDegrees: playback.viewingTilt)
         diagnosticOverlay?.orientation = controls.orientation
-        diagnosticOverlay?.position = controls.position + controls.orientation.act(SIMD3<Float>(-0.7, 0.75, 0.05))
+        diagnosticOverlay?.scale = controls.scale
+        diagnosticOverlay?.position = controls.position + controls.orientation.act(SIMD3<Float>(-0.7, 0.75, 0.05) * controls.scale.x)
 
     }
 

@@ -14,7 +14,7 @@ import simd
             playback.presentation = mode; playback.recenter()
             renderer.applyPose(transform)
             XCTAssertLessThan(simd_length(renderer.video.orientation.act([0,0,-1]) - head.act([0,0,-1])), 0.0001)
-            XCTAssertLessThan(simd_length(controls.position - (SIMD3<Float>(2,1,3) + head.act([0,-0.35,-1.6]))), 0.0001)
+            XCTAssertLessThan(simd_length(controls.position - (SIMD3<Float>(2,1,3) + head.act([0,-0.65625,-3]))), 0.0001)
             let capture = renderer.video.orientation.vector, controlPosition = controls.position
             // Looking around does not drag the panorama along with the head.
             renderer.applyPose(matrix_identity_float4x4)
@@ -26,6 +26,20 @@ import simd
         }
     }
 
+    func testControlsDistanceUpdatesActualPanelScaleWithoutMovingPanorama() throws {
+        let playback=PlaybackModel(),controls=Entity(),renderer=try ImmersiveRenderer(playback:playback,controls:controls)
+        playback.presentation = .vr180
+        renderer.applyPose(matrix_identity_float4x4)
+        let video=renderer.video.transform
+        XCTAssertEqual(controls.position.z,-3,accuracy:0.001)
+        XCTAssertEqual(controls.scale.x,3/1.6,accuracy:0.001)
+        playback.setControlsDistance(5);renderer.applyPose(matrix_identity_float4x4)
+        XCTAssertEqual(controls.position.z,-5,accuracy:0.001)
+        XCTAssertEqual(controls.scale.x,5/1.6,accuracy:0.001)
+        XCTAssertEqual(renderer.video.transform,video)
+        playback.presentation = .screen;renderer.applyPose(matrix_identity_float4x4)
+        XCTAssertLessThan(-2.4*renderer.video.scale.z,controls.position.z,"Flat screen stays behind the panel")
+    }
     func testTiltResetAndUprightAreAppliedToActualRenderer() throws {
         let playback = PlaybackModel(), controls = Entity()
         let renderer = try ImmersiveRenderer(playback: playback, controls: controls)

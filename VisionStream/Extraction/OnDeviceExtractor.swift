@@ -147,6 +147,12 @@ final class ExtractorModel {
         return ExtractedMedia(streams:media.streams.filter { !rejectedSources.contains($0.candidate.source) })
             .higherSource(than:original,decodedHeight:decodedHeight)
     }
+    func resolvedSource(in media:ExtractedMedia?, adaptive:Bool=false)->MediaCandidate? {
+        guard let media else { return nil }
+        let usable=media.streams.filter { !rejectedSources.contains($0.candidate.source) && $0.unavailableReason == nil }
+        if adaptive,let master=usable.first(where:{ $0.isAdaptive }) { return master.candidate }
+        return ExtractedMedia.highestReported(in:usable)?.candidate
+    }
     func reject(_ candidate:MediaCandidate) { rejectedSources.insert(candidate.source) }
     func clear() { job?.cancel();job=nil;page=nil;rejectedSources.removeAll() }
 }

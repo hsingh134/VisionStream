@@ -31,10 +31,20 @@
     visit(document);
     return found.slice(0, 16);
   }
-  function visible(video) {
+  function visibleElement(video, minimumWidth, minimumHeight) {
     const rect = video.getBoundingClientRect(), style = getComputedStyle(video);
     return !video.hidden && style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity) > 0 &&
-      rect.width >= 120 && rect.height >= 68 && rect.right > 0 && rect.bottom > 0 && rect.left < innerWidth && rect.top < innerHeight;
+      rect.width >= minimumWidth && rect.height >= minimumHeight && rect.right > 0 && rect.bottom > 0 && rect.left < innerWidth && rect.top < innerHeight;
+  }
+  function visible(video) { return visibleElement(video, 120, 68); }
+  function surface(video) {
+    if (visible(video)) return video;
+    // A canvas player can keep its decoder video hidden as a texture source.
+    // Only associate a visible canvas inside an explicit, single-video player.
+    const player = video.closest('.video-js, .plyr, .jwplayer, [data-player], a-scene, [class*="video-player"], [id*="video-player"]');
+    if (!player || player.querySelectorAll("video").length !== 1) return null;
+    const canvases = Array.from(player.querySelectorAll("canvas")).filter(visible);
+    return canvases.length === 1 ? canvases[0] : null;
   }
   function advertisement(video) {
     // Only explicit DOM ad markers, never guesses based on a site's name or
@@ -47,16 +57,16 @@
     const target = path.find(node => node instanceof Element);
     if (!target || target.closest('input, textarea, select, [contenteditable="true"]')) return;
     const paused = videos().filter(video => !advertisement(video) && (video.paused || video.ended));
-    const eligible = paused.filter(visible);
-    let selected = eligible.find(video => path.includes(video));
+    const eligible = paused.filter(video => surface(video));
+    let selected = eligible.find(video => path.includes(video) || path.includes(surface(video)));
     if (!selected && event.type !== "keydown") {
       const x = event.clientX, y = event.clientY;
       // Works with play overlays, including sibling custom controls placed over
       // the actual visible video. Clicking elsewhere on the page is not intent.
       selected = eligible.filter(video => {
-        const rect = video.getBoundingClientRect();
+        const rect = surface(video).getBoundingClientRect();
         return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
-      }).sort((a,b) => b.getBoundingClientRect().width*b.getBoundingClientRect().height-a.getBoundingClientRect().width*a.getBoundingClientRect().height)[0];
+      }).sort((a,b) => surface(b).getBoundingClientRect().width*surface(b).getBoundingClientRect().height-surface(a).getBoundingClientRect().width*surface(a).getBoundingClientRect().height)[0];
       if (!selected && target.closest('button, [role="button"]')) {
         const player = target.closest('.video-js, .plyr, .jwplayer, [data-player], [class*="video-player"], [id*="video-player"]');
         const local = paused.filter(video => player?.contains(video));
@@ -106,8 +116,11 @@
       } else {
         sources = Array.from(video.querySelectorAll("source")).filter(hasSource).slice(0, 4).map(s => ({src: s.src, type: s.type}));
       }
+      const presentation = surface(video);
+      if (!sources.length && ((video.readyState || 0) > 0 || presentation?.tagName === "CANVAS"))
+        sources = [{src:"", type:""}];
       for (const source of sources) {
-        if (!source.src || source.src.length > 16384) continue;
+        if (source.src.length > 16384) continue;
         const videoID = ids.get(video);
         candidates.push({
           id: frameID + ":" + videoID + ":" + candidates.length,
@@ -127,14 +140,29 @@
             return projection || layout ? {projection, layout, evidence: "metadata"} : null;
           })(),
           webMedia: { errorCode: video.error?.code || 0, readyState: video.readyState,
-            networkState: video.networkState, paused: Boolean(video.paused) },
+            networkState: video.networkState, paused: Boolean(video.paused),
+            canvasBacked: Boolean(presentation && presentation !== video), adMarked: advertisement(video) },
           playIntent: (() => {
             const intent = playIntents.get(video);
             if (!intent || advertisement(video) || performance.now()-intent.time > 30000) return null;
-            return {id:intent.id, age:Math.max(0,(performance.now()-intent.time)/1000), visible:visible(video)};
+            return {id:intent.id, age:Math.max(0,(performance.now()-intent.time)/1000), visible:Boolean(presentation)};
           })()
         });
       }
+    }
+    // Some XR players keep the HTMLVideoElement outside the document. A
+    // visible canvas + explicit VR control + observed media request is enough
+    // to offer source discovery, never to advertise a native stream or autoplay.
+    if (!candidates.some(candidate => !candidate.webMedia.adMarked)) {
+      const canvas = Array.from(document.querySelectorAll("canvas")).find(visible);
+      const xrControl = Array.from(document.querySelectorAll('button, [role="button"], .a-enter-vr-button')).some(node =>
+        visibleElement(node, 12, 12) && /\b(?:vr|webxr|virtual reality)\b/i.test([node.getAttribute("aria-label"), node.getAttribute("title"), node.textContent].join(" ")));
+      const mediaRequest = performance.getEntriesByType("resource").slice(-64).some(entry => {
+        try { return entry.initiatorType === "video" || /\.(?:mp4|m4v|m3u8|webm)$/i.test(new URL(entry.name,location.href).pathname); } catch { return false; }
+      });
+      if (canvas && xrControl && mediaRequest) candidates.unshift({id:frameID+":canvas-player",videoID:"",source:"",mimeType:"",
+        title:text(document.title || "Browser VR player",160),pageURL:text(location.href),encrypted:false,width:0,height:0,currentTime:0,
+        formatHint:null,playIntent:null,webMedia:{errorCode:0,readyState:0,networkState:0,paused:true,canvasBacked:true,adMarked:false}});
     }
     latest = candidates.slice(0, 16);
     globalThis.webkit?.messageHandlers?.visionStream?.postMessage({frameID, candidates: latest});

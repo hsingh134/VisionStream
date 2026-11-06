@@ -17,10 +17,22 @@ final class ViewingPoseTests: XCTestCase {
             let head = simd_quatf(angle: 0.8, axis: SIMD3<Float>(0,1,0)) * simd_quatf(angle: pitch, axis: SIMD3<Float>(1,0,0))
             pose.placeControls(head: simd_float4x4(head))
             let relative = head.inverse.act(pose.controlsPosition(viewer: [0,1.6,0]) - SIMD3<Float>(0,1.6,0))
-            XCTAssertEqual(relative.y, -0.35, accuracy: 0.001)
-            XCTAssertEqual(relative.z, -1.6, accuracy: 0.001)
+            XCTAssertEqual(relative.y, -0.65625, accuracy: 0.001)
+            XCTAssertEqual(relative.z, -3, accuracy: 0.001)
             XCTAssertEqual(pose.centre.vector, video)
         }
+    }
+    func testControlsDistancePreservesAngularSizeAndClampsInvalidValues() {
+        let pose=ViewingPose(),viewer=SIMD3<Float>(1,2,3)
+        for distance:Double in [2,3,4,5] {
+            let p=pose.controlsPosition(viewer:viewer,distance:distance)-viewer
+            XCTAssertEqual(p.z,-Float(distance),accuracy:0.0001)
+            XCTAssertEqual(ViewingPose.controlsScale(distance:distance)/(-p.z),1/1.6,accuracy:0.0001)
+            XCTAssertEqual(p.y/(-p.z),-0.35/1.6,accuracy:0.0001)
+        }
+        XCTAssertEqual(ViewingPose.boundedControlsDistance(0),2)
+        XCTAssertEqual(ViewingPose.boundedControlsDistance(100),5)
+        XCTAssertEqual(ViewingPose.boundedControlsDistance(.nan),3)
     }
     func testOnlyKnownTransientPlaybackFailuresAreRetried() {
         for code in ["NSURLErrorDomain:-1001", "NSURLErrorDomain:-1005", "NSURLErrorDomain:-1004", "HTTP:503"] {
@@ -59,8 +71,8 @@ final class ViewingPoseTests: XCTestCase {
         }
         let offset = head.inverse.act(before-viewer)
         XCTAssertEqual(offset.x, 0, accuracy: 0.0001)
-        XCTAssertEqual(offset.y, -0.35, accuracy: 0.0001)
-        XCTAssertEqual(offset.z, -1.6, accuracy: 0.0001)
+        XCTAssertEqual(offset.y, -0.65625, accuracy: 0.0001)
+        XCTAssertEqual(offset.z, -3, accuracy: 0.0001)
     }
 
     func testUprightResetLevelsVideoButKeepsControlsFacingReclinedViewer() {

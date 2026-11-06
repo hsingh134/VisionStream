@@ -17,7 +17,7 @@ import Darwin
             return from(ProcessInfo.processInfo.environment)
         }
         static func from(_ env: [String: String]) -> Self? {
-            let names: Set<String> = ["image-quality", "diagnostics", "controls-hide", "tabs", "auto-play", "auto-upgrade", "soak", "saved-state", "downloads", "forms", "quality", "quality4k", "controls", "controls-format", "controls-quality", "mp4", "hls", "library", "library-hls", "cancel", "unsupported", "finder", "reentry", "interrupted"]
+            let names: Set<String> = ["image-quality", "diagnostics", "controls-hide", "tabs", "auto-play", "auto-upgrade", "canvas-video", "soak", "saved-state", "downloads", "forms", "quality", "quality4k", "controls", "controls-format", "controls-quality", "mp4", "hls", "library", "library-hls", "cancel", "unsupported", "finder", "reentry", "interrupted"]
             guard let name = env["VISIONSTREAM_SCENE_TEST"], names.contains(name),
                   let raw = env["VISIONSTREAM_TEST_ORIGIN"], let url = URL(string: raw),
                   url.scheme == "https", ["127.0.0.1", "localhost"].contains(url.host ?? ""),
@@ -170,7 +170,7 @@ import Darwin
         if config.name == "tabs" { try await browserTabs(config, app: app); return }
         if config.name == "forms" { try await forms(config, app: app); return }
         if config.name == "diagnostics" { try await diagnosticChecks(config,app:app);return }
-        if config.name == "auto-play" || config.name == "auto-upgrade" { try await automaticPlayback(config,app:app);return }
+        if ["auto-play","auto-upgrade","canvas-video"].contains(config.name) { try await automaticPlayback(config,app:app);return }
         let path = config.name == "image-quality" ? "quality-audit.html" : ["quality4k", "soak"].contains(config.name) ? "quality-4k.html" : (["quality", "quality4k", "soak"].contains(config.name) || config.name.hasPrefix("controls")) ? "quality.html" : ["mp4", "reentry", "interrupted"].contains(config.name) ? "automation-mp4" : (config.name == "hls" ? "automation-hls" : "empty-test")
         // Submit through the actual address form action rather than restoring a
         // user's saved page or asking an external UI tool to type while locked.
@@ -254,6 +254,10 @@ import Darwin
             record("embedded-public-finder", app: app)
             finderWatch?()
         default:
+            // Transport/control scenes need a running fixture, not a test of
+            // WebKit's opportunistic autoplay scheduling. Programmatic play
+            // still cannot create a trusted native handoff intent.
+            _ = try await app.browser.webView.callAsyncJavaScript("await document.querySelector('video').play();return true;",arguments:[:],in:nil,contentWorld:.defaultClient)
             try await wait("web-inline-playing", seconds: 20) {
                 app.browser.candidates.contains { $0.width > 0 && $0.webMedia?.readyState == 4 && $0.webMedia?.paused == false }
             }
@@ -273,7 +277,7 @@ import Darwin
                 app.playback.immersiveActive && app.playback.decodedWidth > 0 && app.playback.isPlaying &&
                     mounted(.playback) && mounted(.immersive) && returnAction != nil && rendererBounds?() != nil
             }
-            try await wait("browser-window-dismissed") { !mounted(.browser) }
+            try await wait("browser-content-hidden") { app.browser.webView.isHidden && !app.browser.webView.isUserInteractionEnabled }
             if config.name.hasPrefix("library") {
                 try require(app.playback.presentation == .vr180 && app.playback.layout == .sideBySide, "library-projection-layout")
             }
@@ -309,7 +313,7 @@ import Darwin
             guard let returnAction else { throw Failure.check("missing-return-control-action") }
             await returnAction()
             try await wait("browser-restored", seconds: 20) {
-                !app.playback.immersiveActive && !app.playback.isReady && app.browser.webView.window != nil && mounted(.browser) && ["active", "inactive"].contains(SimulatorTestMonitor.browserScenePhase) && !mounted(.playback)
+                !app.playback.immersiveActive && !app.playback.isReady && app.browser.webView.window != nil && !app.browser.webView.isHidden && app.browser.webView.isUserInteractionEnabled && mounted(.browser) && ["active", "inactive"].contains(SimulatorTestMonitor.browserScenePhase) && !mounted(.playback)
             }
             try require(rendererBounds?() == nil, "renderer-released-on-exit")
             record("real-exit-and-browser-restoration", app: app)
@@ -527,16 +531,17 @@ import Darwin
         try require(app.browser.candidates.isEmpty && !mounted(.videoBar),"empty-browser-hides-video-bar")
         record("empty-browser-hides-video-bar",app:app)
         app.browser.preferences.openVideosInVR=true
-        let delayed=config.name == "auto-upgrade",origin=config.origin.absoluteString
+        let delayed=config.name == "auto-upgrade",canvas=config.name == "canvas-video",origin=config.origin.absoluteString
+        let pageName=canvas ? "canvas-video.html":"quality.html"
         app.automaticSources=AutomaticStreamResolver(resolve:{ _ in
             if delayed { try await Task.sleep(for:.seconds(14)) }
             return try ExtractedMedia.parse(JSONSerialization.data(withJSONObject:["status":"ok","streams":[
                 ["source":origin+"/quality-4k/master.m3u8","mimeType":"application/vnd.apple.mpegurl","width":3840,"height":1920,"unavailableReason":""],
                 ["source":origin+"/protected-8k.mp4","mimeType":"video/mp4","width":8192,"height":4096,"unavailableReason":"protected"]
-            ]]),pageURL:origin+"/quality.html")
+            ]]),pageURL:origin+"/"+pageName)
         })
         openAddress?();try await wait("automatic-address") { mounted(.address) }
-        submitAddress?(config.origin.appendingPathComponent("quality.html").absoluteString)
+        submitAddress?(config.origin.appendingPathComponent(pageName).absoluteString)
         try await wait("automatic-page-playing",seconds:45) {
             app.browser.pageHTTPStatus==200 && app.browser.candidates.contains { $0.width>0 } && mounted(.videoBar)
         }
@@ -558,6 +563,11 @@ import Darwin
                 return true;
                 """,arguments:["token":id],in:nil,contentWorld:.defaultClient)
         }
+        if canvas {
+            try require(app.browser.candidates.contains { $0.requiresSourceDiscovery && $0.webMedia?.canvasBacked==true },"canvas-blob-observed")
+            try require(AutomaticPlayback.actionable(in:app.browser.candidates).isEmpty && mounted(.videoBar),"browser-only-video-keeps-discovery-bar")
+            record("canvas-blob-video-displays-source-discovery-bar",app:app)
+        }
         let id=UUID().uuidString
         try await signal(id)
         if delayed {
@@ -569,13 +579,14 @@ import Darwin
             mounted(.immersive) && mounted(.playback) && returnAction != nil
         }
         try require(app.playback.automaticallyDetectFormat && app.playback.presentation == .vr180 && app.playback.layout == .sideBySide,"automatic-format-retained")
+        try await wait("automatic-browser-hidden") { app.browser.webView.isHidden && !app.browser.webView.isUserInteractionEnabled }
         record("automatic-handoff-highest-4k-vr180-sbs-and-controls",app:app)
         let firstFrames=SimulatorTestMonitor.framesReceived
         try await wait("automatic-progressing-frames") { SimulatorTestMonitor.framesReceived>firstFrames+3 }
         record("automatic-native-frames-progress",app:app)
         if let exit=returnAction { await exit() } else { throw Failure.check("automatic-missing-exit") }
         try await wait("automatic-browser-return",seconds:20) {
-            !app.playback.immersiveActive && !app.playback.isReady && SimulatorTestMonitor.browserScenePhase=="active" && !mounted(.playback)
+            !app.playback.immersiveActive && !app.playback.isReady && !app.browser.webView.isHidden && app.browser.webView.isUserInteractionEnabled && SimulatorTestMonitor.browserScenePhase=="active" && !mounted(.playback)
         }
         try await signal(id)
         try await Task.sleep(for:.milliseconds(1800))

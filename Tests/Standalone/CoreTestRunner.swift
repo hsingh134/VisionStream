@@ -75,6 +75,8 @@ import Foundation
             ("automatic play preference",automatic.testDisabledPreferenceConsumesGestureRatherThanLaunchingWhenReenabled),
             ("automatic play selection",automatic.testNewestPreparedIntentWinsAndFallbacksUseTheSameElementIntent),
             ("conditional video bar",automatic.testVideoBarOnlyHasActionableNativeSources),
+            ("browser-local canvas discovery",automatic.testBrowserLocalCanvasOffersDiscoveryWithoutCallingItNativePlayable),
+            ("controls angular size and distance",viewing.testControlsDistancePreservesAngularSizeAndClampsInvalidValues),
             ("automatic play bounded guard",automatic.testBusyPageBoundNeverEvictsATokenAndReopensOldVideo),
             ("HLS owned package round trip", hls.testPackageOwnershipAndJournalRoundTrip),
             ("HLS package boundaries", hls.testUnownedLinkedAndDamagedPackagesAreRejected),

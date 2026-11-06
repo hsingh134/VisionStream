@@ -65,6 +65,11 @@ final class PlaybackModel {
     private(set) var recenterID = 0
     private(set) var recenterUpright = false
     private(set) var viewingTilt = 0.0
+    private(set) var controlsDistance = ViewingPose.defaultControlsDistance
+    func setControlsDistance(_ metres: Double) {
+        controlsDistance = ViewingPose.boundedControlsDistance(metres)
+        diagnostics?.record(.controls,context:diagnosticContext,labels:["action":"controls-distance-changed"],numbers:["metres":controlsDistance])
+    }
     private(set) var recenterCountdown: Int?
     @ObservationIgnored private var recenterTask: Task<Void, Never>?
     var immersiveActive = false

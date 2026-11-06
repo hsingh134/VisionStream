@@ -11,7 +11,7 @@ import SwiftUI
             guard let transport = attachments.entity(for: "transport") else { return }
             app.playback.resetViewingPosition()
             app.playback.controls.reset()
-            transport.position = [0, 1.2, -1.6]
+            transport.position = ViewingPose().controlsPosition(viewer: [0, 1.6, 0], distance: app.playback.controlsDistance)
             content.add(transport)
             do {
                 let diagnostic = attachments.entity(for:"video-diagnostics")
@@ -30,7 +30,7 @@ import SwiftUI
                         guard let renderer, let scene = renderer.inputSurface.scene else { return false }
                         let viewer = renderer.inputSurface.position
                         return [SIMD3<Float>(0,0,-1), SIMD3<Float>(1,0,0), SIMD3<Float>(0,1,0)].allSatisfy { direction in
-                            scene.raycast(origin: viewer, direction: direction, length: 8).contains { $0.entity === renderer.inputSurface }
+                            scene.raycast(origin: viewer, direction: direction, length: 12).contains { $0.entity === renderer.inputSurface }
                         }
                     }
                     SimulatorScenarioRunner.rendererPose = { [weak renderer] in
@@ -56,6 +56,7 @@ import SwiftUI
                 PlaybackControls(app: app, immersive: true)
                     .accessibilityHidden(!app.playback.controls.isVisible)
                     .frame(width: 820)
+                    .background(Color(white: 0.06), in: RoundedRectangle(cornerRadius: 36))
                     .glassBackgroundEffect()
             }
         }
@@ -63,7 +64,11 @@ import SwiftUI
             guard let renderer, value.entity === renderer.inputSurface else { return }
             app.playback.controls.toggle()
         })
-        .onAppear { app.history.record(.lifecycle,context:app.playback.diagnosticContext,labels:["phase":"immersive-opened"]); app.playback.immersiveActive = true }
+        .onAppear {
+            app.history.record(.lifecycle,context:app.playback.diagnosticContext,labels:["phase":"immersive-opened"])
+            app.playback.immersiveActive = true
+            app.browser.webView.isHidden=true;app.browser.webView.isUserInteractionEnabled=false
+        }
         .task(id: app.playback.quality) { await app.upgradeStreamingQualityIfNeeded() }
         .onDisappear {
             app.browser.useWebsiteControls()
@@ -76,8 +81,9 @@ import SwiftUI
             app.history.record(.lifecycle,context:app.playback.diagnosticContext,labels:["phase":"immersive-closed"])
             renderer?.stop(); renderer = nil
             app.playback.stop(); app.playback.immersiveActive = false
+            app.browser.webView.isHidden=false;app.browser.webView.isUserInteractionEnabled=true
             app.playback.cancelScheduledRecenter()
-            openWindow(id: "browser")
+            if !app.browserWindowVisible { openWindow(id: "browser") }
         }
         .simulatorPanel(.immersive)
     }

@@ -69,6 +69,20 @@ final class AutomaticPlaybackTests:XCTestCase {
         XCTAssertTrue(AutomaticPlayback.actionable(in:[blob,protected,insecure]).isEmpty)
         XCTAssertEqual(AutomaticPlayback.actionable(in:[good,blob,protected,hls]).map(\.id),[good.id,hls.id])
     }
+    func testBrowserLocalCanvasOffersDiscoveryWithoutCallingItNativePlayable() {
+        var blob=video();blob.source="blob:https://page.example/local";blob.pageURL="https://page.example/watch"
+        blob.webMedia?.canvasBacked=true
+        XCTAssertTrue(blob.requiresSourceDiscovery)
+        XCTAssertTrue(AutomaticPlayback.actionable(in:[blob]).isEmpty)
+        XCTAssertEqual(AutomaticPlayback.detected(in:[blob]).count,1)
+        var policy=AutomaticPlayback()
+        XCTAssertEqual(policy.next(in:[blob],navigation:1,pageAge:10)?.id,blob.id)
+        blob.encrypted=true;XCTAssertFalse(blob.requiresSourceDiscovery)
+        blob.encrypted=false;blob.webMedia?.adMarked=true
+        XCTAssertTrue(AutomaticPlayback.detected(in:[blob]).isEmpty)
+        blob.webMedia?.adMarked=false;blob.pageURL="https://user:secret@page.example/watch"
+        XCTAssertFalse(blob.requiresSourceDiscovery)
+    }
     func testBusyPageBoundNeverEvictsATokenAndReopensOldVideo() {
         var policy=AutomaticPlayback();let first=video()
         XCTAssertNotNil(policy.next(in:[first],navigation:1,pageAge:10))

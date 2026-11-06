@@ -1,5 +1,11 @@
 # Installation and signing
 
+## Control depth and browser VR players (0.18.0)
+
+Immersive controls start farther away with a solid backdrop. Use **Position → Controls distance** to adjust from 2 to 5 metres; their apparent size stays constant. Tap the video once to hide/show the panel. The preferred distance lasts for the current app session. Physical comfort must be checked on your headset.
+
+A browser-local or canvas video can now show **Find and watch in VR** instead of disappearing from the video bar. This searches for a compatible native stream. A website’s VR icon alone does not guarantee such a stream exists: pure WebXR scenes and protected/browser-only media can remain website-only. The page keeps playing if source discovery fails.
+
 ## Automatic highest quality (0.17.0)
 
 Leave streaming quality on **Highest**. A normal website Play gesture checks the individual HTTPS page with the bundled source finder before opening VR. The first wait is limited to eight seconds; if it takes longer, the detected source opens and the same lookup continues during playback. Once a higher-resolution compatible source is found, VisionStream switches automatically at the current position, retaining pause state and VR geometry. Expect a short buffering interruption when switching sources. No extra Find streams action is required.

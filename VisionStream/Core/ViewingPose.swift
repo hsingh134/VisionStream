@@ -30,8 +30,16 @@ public struct ViewingPose: Sendable {
         return simd_normalize(centre * simd_quatf(angle: Float(tilt) * .pi / 180, axis: SIMD3<Float>(1, 0, 0)))
     }
 
-    public func controlsPosition(viewer: SIMD3<Float>) -> SIMD3<Float> {
-        viewer + controlsOrientation.act(SIMD3<Float>(0, -0.35, -1.6))
+    public static let defaultControlsDistance: Double = 3
+    public static func boundedControlsDistance(_ value: Double) -> Double {
+        value.isFinite ? min(5, max(2, value)) : defaultControlsDistance
+    }
+    public static func controlsScale(distance: Double) -> Float {
+        Float(boundedControlsDistance(distance) / 1.6)
+    }
+    public func controlsPosition(viewer: SIMD3<Float>, distance: Double = Self.defaultControlsDistance) -> SIMD3<Float> {
+        let scale = Self.controlsScale(distance: distance)
+        return viewer + controlsOrientation.act(SIMD3<Float>(0, -0.35 * scale, -1.6 * scale))
     }
 
     /// Move only the controls to the current head-facing frame; leave the movie centred.

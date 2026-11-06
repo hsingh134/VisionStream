@@ -93,6 +93,8 @@ def make_video(projection, layout):
             'hls': f'hls/{projection}-{layout}/master.m3u8', 'licence': 'CC0-1.0'}
 
 def main():
+    OUT.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(ROOT/'Fixtures/canvas-video.html', OUT/'canvas-video.html')
     if not shutil.which('ffmpeg'): raise SystemExit('Install ffmpeg, then rerun this script.')
     OUT.mkdir(parents=True, exist_ok=True)
     manifest = [make_video(projection, layout) for projection in ['vr180', 'vr360'] for layout in ['mono','sbs','tb']]

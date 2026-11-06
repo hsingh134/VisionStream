@@ -4,9 +4,15 @@ Version 0.16.0 adds Original, Enhanced and Maximum Quality picture modes, paused
 
 A native web browser and immersive video player for Apple Vision Pro. Browse a website, start a compatible video and open it in a native Screen, VR180 or VR360 viewer.
 
-**Current version: 0.15.0 · Early source release · visionOS 26+**
+**Current version: 0.18.0 · Early source release · visionOS 26+**
 
 VisionStream has automated simulator coverage on visionOS 26 and 27 and has been installed on a physical Vision Pro. Physical-headset playback, comfort and broad website compatibility still need testing. It is not currently available through the App Store or TestFlight.
+
+## Control comfort and canvas videos (0.18.0)
+
+Controls now sit farther away by default, retain their apparent size and use a solid background over stereoscopic video. **Position → Controls distance** adjusts their depth from 2 to 5 metres. Physical comfort still needs checking on the headset.
+
+Browser-local and canvas-backed videos can keep the video bar visible and offer **Find and watch in VR**. A supported unprotected HTTPS MP4/HLS source must still be resolved; a website’s VR icon alone does not make arbitrary WebXR content natively playable. See [use and limitations](Docs/INSTALLATION.md) and [verification](Docs/TESTING.md).
 
 ## Automatic highest-quality streaming (0.17.0)
 

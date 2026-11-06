@@ -1,0 +1,10 @@
+<!doctype html><meta charset="utf-8"><title>CC0 canvas VR180 SBS player</title>
+<style>body{background:#18202a;color:white;font:24px system-ui}canvas{width:640px;height:320px}button{font:24px system-ui}</style>
+<h1>Original CC0 canvas video</h1><div data-player><video hidden muted loop playsinline data-projection="vr180" data-stereo="sbs"></video><canvas width="1024" height="512"></canvas><button aria-label="Enter VR">Play VR video</button></div>
+<script>
+const video=document.querySelector('video'),canvas=document.querySelector('canvas'),ctx=canvas.getContext('2d');
+window.fixtureReady=false;
+fetch('vr180-sbs.mp4').then(r=>r.blob()).then(blob=>{video.src=URL.createObjectURL(blob);video.load();window.fixtureReady=true;});
+document.querySelector('button').onclick=()=>video.play();
+function draw(){if(video.readyState>=2)ctx.drawImage(video,0,0,canvas.width,canvas.height);requestAnimationFrame(draw);}draw();
+</script>

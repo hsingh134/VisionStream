@@ -29,6 +29,8 @@ public struct MediaCandidate: Codable, Identifiable, Hashable, Sendable {
         public var readyState: Int
         public var networkState: Int
         public var paused: Bool
+        public var canvasBacked: Bool? = nil
+        public var adMarked: Bool? = nil
     }
 
     public init(id: String, videoID: String = "", source: String, mimeType: String = "",
@@ -41,6 +43,12 @@ public struct MediaCandidate: Codable, Identifiable, Hashable, Sendable {
     }
 
     public var compatibility: StreamCompatibility { StreamCompatibility.evaluate(self) }
+    public var requiresSourceDiscovery: Bool {
+        guard !encrypted, webMedia?.adMarked != true,
+              let page = URL(string: pageURL), page.scheme == "https", page.host != nil,
+              page.user == nil, page.password == nil else { return false }
+        return source.isEmpty || URL(string: source)?.scheme == "blob"
+    }
     /// Default choice only; an explicit picker selection remains authoritative.
     /// Prefer a direct candidate that the webpage has actually prepared/started
     /// over an inactive fallback. This is evidence for selection, not proof that

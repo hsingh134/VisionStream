@@ -47,7 +47,7 @@ import Foundation
             "observedEpoch": Date().timeIntervalSince1970,
             "mountedPanels": mountedPanels.sorted(),
             "report": report,
-            "browser": ["scenePhase": browserScenePhase, "attachedToWindow": app.browser.webView.window != nil,
+            "browser": ["scenePhase": browserScenePhase, "attachedToWindow": app.browser.webView.window != nil, "contentHidden":app.browser.webView.isHidden,"hitTestingEnabled":app.browser.webView.isUserInteractionEnabled,
                         "isLoading": app.browser.isLoading, "candidateCount": app.browser.candidates.count,
                         "canGoBack": app.browser.canGoBack, "canGoForward": app.browser.canGoForward,
                         "navigationVersion": app.browser.navigationVersion],

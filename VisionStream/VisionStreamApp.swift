@@ -7,6 +7,7 @@ struct VisionStreamApp: App {
     @State private var app = AppModel()
     var body: some Scene {
         Window("VisionStream", id: "browser") { BrowserView(app: app) }
+            .windowStyle(.plain)
             .defaultSize(width: 1200, height: 850)
             .commands { PlaybackModeCommands(playback: app.playback) }
         ImmersiveSpace(id: "video") { ImmersivePlayerView(app: app) }

@@ -182,6 +182,12 @@ private actor SuspendedResolution {
         finder.reject(found.streams[0].candidate)
         XCTAssertNil(finder.higherSource(in:found,than:low))
         finder.clear();XCTAssertNotNil(finder.higherSource(in:found,than:low))
+        let adaptive=try ExtractedMedia.parse(JSONSerialization.data(withJSONObject:["status":"ok","streams":[
+            ["source":"https://cdn.example/master.m3u8","mimeType":"application/vnd.apple.mpegurl","width":0,"height":0,"adaptive":true,"unavailableReason":""],
+            ["source":"https://cdn.example/high.mp4","mimeType":"video/mp4","width":2880,"height":1440,"unavailableReason":""]
+        ]]))
+        XCTAssertEqual(finder.resolvedSource(in:adaptive,adaptive:true)?.source,"https://cdn.example/master.m3u8")
+        XCTAssertEqual(finder.resolvedSource(in:adaptive)?.height,1440)
     }
     func testSourceUpgradePreservesPausedTimelineAndVRFormatAndRollsBackFailure() async throws {
         let base=try XCTUnwrap(ProcessInfo.processInfo.environment["VISIONSTREAM_TEST_ORIGIN"])

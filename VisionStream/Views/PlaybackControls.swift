@@ -195,6 +195,16 @@ import SwiftUI
                 Text("Lower"); Spacer(); Text("Raise")
             }.font(.caption).foregroundStyle(.secondary)
             Button("Reset tilt") { playback.setViewingTilt(0) }.disabled(playback.viewingTilt == 0)
+            Divider()
+            HStack {
+                Text("Controls distance")
+                Spacer()
+                Text(String(format: "%.1f m", playback.controlsDistance)).monospacedDigit().foregroundStyle(.secondary)
+            }
+            Slider(value: Binding(get: { playback.controlsDistance }, set: playback.setControlsDistance), in: 2...5, step: 0.5)
+                .accessibilityLabel("Controls distance")
+            Text("Move the controls farther away if their depth feels uncomfortable. Their apparent size stays the same.")
+                .font(.caption).foregroundStyle(.secondary)
             Button("Reset upright", systemImage: "arrow.counterclockwise") {
                 playback.recenter(upright: true)
             }
@@ -274,7 +284,7 @@ import SwiftUI
         defer { returningToPage = false }
         app.browser.useWebsiteControls()
         app.playback.cancelScheduledRecenter()
-        openWindow(id: "browser")
+        if !app.browserWindowVisible { openWindow(id: "browser") }
         // Never ask visionOS to dismiss the last scene before its replacement
         // window exists. Keep the exit control alive if presentation is delayed.
         for _ in 0..<50 {

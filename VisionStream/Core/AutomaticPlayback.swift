@@ -9,7 +9,13 @@ public struct AutomaticPlayback: Sendable {
     public init() {}
 
     public static func actionable(in candidates: [MediaCandidate]) -> [MediaCandidate] {
-        candidates.filter { $0.compatibility == .candidate }
+        candidates.filter { $0.compatibility == .candidate && $0.webMedia?.adMarked != true }
+    }
+    public static func detected(in candidates: [MediaCandidate]) -> [MediaCandidate] {
+        candidates.filter {
+            $0.webMedia?.adMarked != true && ($0.compatibility == .candidate ||
+            ($0.requiresSourceDiscovery && (($0.webMedia?.readyState ?? 0) > 0 || $0.width > 0 || $0.webMedia?.canvasBacked == true)))
+        }
     }
 
     public mutating func next(in candidates: [MediaCandidate], navigation: Int, pageAge: Double, enabled: Bool = true) -> MediaCandidate? {
@@ -26,7 +32,7 @@ public struct AutomaticPlayback: Sendable {
         // Turning the preference off consumes current gestures, rather than
         // opening a stale video later if the user switches it on again.
         if !enabled { for media in recent { if let id=media.playIntent?.id { remember(id) } }; return nil }
-        let playing=Self.actionable(in:recent).filter {
+        let playing=Self.detected(in:recent).filter {
             $0.playIntent?.visible == true && $0.webMedia?.paused == false &&
             $0.webMedia?.errorCode == 0 && ($0.webMedia?.readyState ?? 0) >= 2 && $0.width > 0 && $0.height > 0
         }

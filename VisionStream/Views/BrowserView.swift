@@ -4,7 +4,6 @@ import SwiftUI
     let app: AppModel
     @Environment(\.openImmersiveSpace) private var openImmersiveSpace
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
-    @Environment(\.dismissWindow) private var dismissWindow
     @Environment(\.scenePhase) private var scenePhase
     @State private var browserIsActive=false
     @State private var selectedID: String?
@@ -35,7 +34,7 @@ import SwiftUI
         playableCandidates.first { $0.id == selectedID } ?? MediaCandidate.preferredForPlayback(in: playableCandidates)
     }
 
-    private var playableCandidates: [MediaCandidate] { AutomaticPlayback.actionable(in:app.browser.candidates) }
+    private var playableCandidates: [MediaCandidate] { AutomaticPlayback.detected(in:app.browser.candidates) }
     private var videoBarVisible: Bool { !playableCandidates.isEmpty || app.playback.isPreparing || app.playback.openingImmersive }
 
     var body: some View {
@@ -116,7 +115,7 @@ import SwiftUI
                 }.scrollIndicators(.hidden).accessibilityLabel("Favourites")
             }
             if browser.isLoading { ProgressView().progressViewStyle(.linear) }
-            BrowserWebView(browser: browser).id(browser.id)
+            BrowserWebView(browser: browser, hidden: app.playback.immersiveActive).id(browser.id)
             if browser.message != nil || app.playback.errorMessage != nil {
                 VStack(alignment:.leading,spacing:8) {
                     if let message=browser.message { Text(message).foregroundStyle(.orange) }
@@ -170,13 +169,15 @@ import SwiftUI
                         if findingHigherQuality { Text("Finding highest quality…").font(.callout) }
                         Button("Cancel") { cancel() }
                     } else {
-                        Button("Watch in VR", systemImage: "vision.pro") { if let selected { watch(selected,discoverHighest:true) } }
+                        Button(selected?.requiresSourceDiscovery == true ? "Find and watch in VR" : "Watch in VR", systemImage: "vision.pro") { if let selected { watch(selected,discoverHighest:true) } }
                             .keyboardShortcut("v", modifiers: [.command, .shift])
                             .buttonStyle(.borderedProminent)
-                            .disabled(selected?.compatibility != .candidate || app.playback.openingImmersive || app.playback.immersiveActive)
+                            .disabled(selected == nil || (selected?.compatibility != .candidate && selected?.requiresSourceDiscovery != true) || app.playback.openingImmersive || app.playback.immersiveActive)
                     }
                 }
-                if let reason = selected?.compatibility.reason { Text(reason).font(.caption).foregroundStyle(.orange) }
+                if selected?.requiresSourceDiscovery == true {
+                    Text(selected?.webMedia?.canvasBacked == true ? "Browser canvas player detected. VisionStream can look for a compatible video stream." : "Browser video detected. VisionStream will look for a compatible stream for native VR playback.").font(.caption).foregroundStyle(.secondary)
+                } else if let reason = selected?.compatibility.reason { Text(reason).font(.caption).foregroundStyle(.orange) }
                 HStack {
                     Button { showFormat.toggle() } label: {
                         Label(app.playback.automaticallyDetectFormat ? "Format: Automatic" : "Format: \(app.playback.presentation.label) · \(app.playback.layout.label)", systemImage: "slider.horizontal.3")
@@ -285,6 +286,18 @@ import SwiftUI
             cancel(); selectedID = nil; pendingDownload = nil; pendingSavedPlayback = nil
             showFinder = false; showLibrary = false; showFormat = false
             app.browser.startIfNeeded()
+        }
+        .glassBackgroundEffect(displayMode: app.playback.immersiveActive ? .never : .always)
+        .opacity(app.playback.immersiveActive ? 0 : 1)
+        .allowsHitTesting(!app.playback.immersiveActive)
+        .disabled(app.playback.immersiveActive)
+        .accessibilityHidden(app.playback.immersiveActive)
+        .persistentSystemOverlays(app.playback.immersiveActive ? .hidden : .automatic)
+        .onChange(of: app.playback.immersiveActive) { _, active in
+            if active {
+                showAddressSheet=false;showStreamSheet=false;showFinder=false;showLibrary=false
+                showDownloads=false;showDetails=false;showBookmarks=false;showSettings=false;showHelp=false;showFormat=false
+            }
         }
         .onAppear { app.browserWindowVisible = true; startBrowser() }
         .onDisappear { app.browserWindowVisible = false; browserIsActive = false; if !app.playback.immersiveActive && !app.playback.openingImmersive { app.tabs.onUserPlayback=nil;cancel() } }
@@ -458,20 +471,29 @@ import SwiftUI
             } else {
                 requestedMedia = sourceBrowser.freshCandidate(for: media)
                 let detected=requestedMedia
-                if discoverHighest,app.playback.quality == .highest,
-                   let page=AutomaticStreamResolver.document(detected.pageURL),
+                if (discoverHighest || detected.requiresSourceDiscovery),(app.playback.quality == .highest || detected.requiresSourceDiscovery),
+                   let page=AutomaticStreamResolver.document(detected.requiresSourceDiscovery ? sourceBrowser.address : detected.pageURL),
                    page==AutomaticStreamResolver.document(sourceBrowser.address) {
                     findingHigherQuality=true
                     app.history.record(.quality,context:sourceBrowser.diagnosticContext,labels:["phase":"automatic-source-search-started"])
-                    let found=await app.automaticSources.result(for:page.absoluteString,within:8)
+                    let found=await app.automaticSources.result(for:page.absoluteString,within:detected.requiresSourceDiscovery ? 25:8)
                     guard !Task.isCancelled,operation==token,app.browser === sourceBrowser,sourceBrowser.navigationVersion==navigationVersion,AutomaticStreamResolver.document(sourceBrowser.address)==page else { return }
-                    if let higher=app.automaticSources.higherSource(in:found,than:detected) {
+                    if let higher=(detected.requiresSourceDiscovery ? app.automaticSources.resolvedSource(in:found,adaptive:app.playback.quality == .adaptive) : app.automaticSources.higherSource(in:found,than:detected)) {
                         requestedMedia=higher.withBrowserFormatContext(page:page,title:sourceBrowser.pageTitle,candidates:sourceBrowser.candidates)
                         requestedMedia.currentTime=sourceBrowser.freshCandidate(for:detected).currentTime
                         if let hint=detected.formatHint { requestedMedia.formatHint=hint }
                     }
                     findingHigherQuality=false
                     app.history.record(.quality,context:sourceBrowser.diagnosticContext,labels:["phase":requestedMedia.source == detected.source ? "automatic-source-search-original":"automatic-source-search-higher"],numbers:["reportedHeight":Double(requestedMedia.height)])
+                }
+                if requestedMedia.requiresSourceDiscovery {
+                    // Record this candidate as unsupported instead of leaving
+                    // diagnostics pointing at an unrelated previous attempt.
+                    _ = await app.playback.prepare(requestedMedia,cookies:[])
+                    guard !Task.isCancelled,operation==token,app.browser === sourceBrowser,sourceBrowser.navigationVersion==navigationVersion else { return }
+                    app.playback.errorMessage="A browser video was detected, but no compatible native stream was found. Continue with the website’s player or try Find more sources."
+                    app.history.record(.quality,context:sourceBrowser.diagnosticContext,labels:["phase":"browser-video-no-native-source"])
+                    return
                 }
                 guard let url = URL(string: requestedMedia.source) else { return }
                 var cookies = await sourceBrowser.cookies(for: url)
@@ -486,7 +508,7 @@ import SwiftUI
                     app.history.record(.playback, context: sourceBrowser.diagnosticContext, labels: ["phase": "refresh-detected-source-before-handoff"])
                 }
                 ready = await app.playback.prepare(requestedMedia, cookies: cookies, userAgent: userAgent, cookieProvider: { [weak sourceBrowser] url in await sourceBrowser?.cookies(for: url) ?? [] })
-                if !ready,requestedMedia.source != detected.source,!Task.isCancelled,operation==token,
+                if !ready,!detected.requiresSourceDiscovery,requestedMedia.source != detected.source,!Task.isCancelled,operation==token,
                    app.browser === sourceBrowser,sourceBrowser.navigationVersion==navigationVersion {
                     app.automaticSources.reject(requestedMedia)
                     requestedMedia=sourceBrowser.freshCandidate(for:detected)
@@ -521,19 +543,10 @@ import SwiftUI
                       app.browser === sourceBrowser, sourceBrowser.navigationVersion == navigationVersion, app.playback.isReady else {
                     await dismissImmersiveSpace(); return
                 }
-                // The immersive view owns the controls attachment. Close this
-                // window only after native readiness and normal page pausing;
-                // immersive dismissal reopens the same in-memory browser.
-                if (saved != nil || savedHLS != nil), let scene = sourceBrowser.webView.window?.windowScene {
-                    // Address the actual browser scene after a modal-sheet handoff.
-                    // A scene-scoped request also exposes a public error callback,
-                    // unlike the identifier-only SwiftUI dismissal action.
-                    let history=app.history,context=app.playback.diagnosticContext
-                    history.record(.lifecycle,context:context,labels:["phase":"saved-browser-scene-close-requested"])
-                    UIApplication.shared.requestSceneSessionDestruction(scene.session,options:nil) { error in
-                        Task { @MainActor in history.record(.lifecycle,context:context,labels:["phase":"saved-browser-scene-close-failed"],codes:PlaybackDiagnostics.failure(error)) }
-                    }
-                } else { dismissWindow(id: "browser") }
+                // Retain the browser scene and its WebKit session. Its content,
+                // glass and window controls are hidden while immersion is active.
+                app.history.record(.lifecycle,context:app.playback.diagnosticContext,labels:["phase":"browser-retained-hidden-for-immersive"])
+
             case .userCancelled: app.playback.stop()
             case .error: app.playback.fail("visionOS could not open the immersive space. Close other immersive experiences and try again.")
             @unknown default: app.playback.fail("The immersive space is unavailable.")

@@ -79,20 +79,25 @@ import WebKit
         defer { defaults.removePersistentDomain(forName: name) }
         preferences.restoration = .page
         let tabs = BrowserTabs(preferences: preferences), first = tabs.active
-        defer { tabs.pages.forEach { $0.closeTab() } }
+        let scene=try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window=try XCTUnwrap(scene.windows.first { !$0.isHidden })
+        func mount(_ browser:BrowserModel) { browser.webView.frame=window.bounds;window.addSubview(browser.webView) }
+        defer { tabs.pages.forEach { $0.closeTab();$0.webView.removeFromSuperview() } }
+        // Match the actual tab strip: only the active WKWebView is mounted.
+        mount(first)
         first.open(base.appendingPathComponent("empty-test"))
         try await wait { !first.isLoading && first.pageHTTPStatus == 200 }
         first.open(base.appendingPathComponent("quality.html"))
         try await wait { !first.isLoading && first.canGoBack }
-        let second = try XCTUnwrap(tabs.add()); second.startIfNeeded()
+        let second = try XCTUnwrap(tabs.add());first.webView.removeFromSuperview();mount(second);second.startIfNeeded()
         try await wait { !second.isLoading }
         XCTAssertTrue(second.isStartPage); XCTAssertTrue(second.address.isEmpty)
         XCTAssertFalse(second.canGoBack)
-        tabs.select(first.id)
+        tabs.select(first.id);second.webView.removeFromSuperview();mount(first)
         XCTAssertEqual(first.webView.url?.path, "/quality.html")
         let history = try XCTUnwrap(first.backPages.first { $0.url.path == "/empty-test" })
         first.go(to: history)
-        try await wait { !first.isLoading && first.webView.url?.path == "/empty-test" }
+        try await wait { !first.isLoading && first.webView.url?.path == "/empty-test" && first.canGoForward }
         XCTAssertTrue(first.canGoForward)
     }
     func testBackgroundTabsSuspendMediaAndResumePermissionWhenSelected() async throws {

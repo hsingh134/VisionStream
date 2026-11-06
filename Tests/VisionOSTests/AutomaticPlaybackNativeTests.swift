@@ -8,8 +8,8 @@ import UIKit
         let url=try XCTUnwrap(ProcessInfo.processInfo.environment["VISIONSTREAM_TEST_ORIGIN"].flatMap(URL.init(string:)))
         guard url.scheme=="https",["127.0.0.1","localhost"].contains(url.host) else { throw URLError(.badURL) };return url
     }
-    private func wait(_ condition:()->Bool) async throws {
-        let end=Date().addingTimeInterval(20)
+    private func wait(seconds: Double = 20, _ condition:()->Bool) async throws {
+        let end=Date().addingTimeInterval(seconds)
         while !condition(),Date()<end { try await Task.sleep(for:.milliseconds(50)) }
         XCTAssertTrue(condition())
     }
@@ -75,6 +75,42 @@ import UIKit
         try await wait { browser.pageHTTPStatus==200 && !browser.isLoading }
         XCTAssertTrue(AutomaticPlayback.actionable(in:browser.candidates).isEmpty)
     }
+    func testCanvasBlobShowsDiscoveryAndSyntheticPlaybackDoesNotOpenVR() async throws {
+        let (preferences,defaults,name)=try preferences(),browser=BrowserModel(preferences:preferences),origin=try origin()
+        try attach(browser)
+        defer { browser.webView.stopLoading();browser.webView.removeFromSuperview();defaults.removePersistentDomain(forName:name) }
+        var requests:[MediaCandidate]=[];browser.onUserPlayback={ requests.append($0) }
+        browser.open(origin.appendingPathComponent("canvas-video.html"))
+        try await wait(seconds:45) { browser.candidates.contains { $0.requiresSourceDiscovery && $0.width>0 } }
+        _ = try await browser.webView.callAsyncJavaScript("await document.querySelector('video').play();return true;",arguments:[:],in:nil,contentWorld:.defaultClient)
+        try await wait { browser.candidates.contains { $0.webMedia?.canvasBacked==true && $0.webMedia?.paused==false } }
+        XCTAssertEqual(AutomaticPlayback.detected(in:browser.candidates).count,1)
+        XCTAssertTrue(AutomaticPlayback.actionable(in:browser.candidates).isEmpty)
+        XCTAssertTrue(requests.isEmpty,"Synthetic/autoplay must remain inline")
+        try await inject(browser,id:UUID().uuidString)
+        try await wait { requests.count==1 }
+        XCTAssertTrue(requests[0].requiresSourceDiscovery)
+        XCTAssertNotEqual(requests[0].compatibility,.candidate,"Blob detection must not claim native compatibility")
+    }
+
+    func testDetachedCanvasWithSmallVRIconOffersDiscoveryWithoutAutoplay() async throws {
+        let (preferences,defaults,name)=try preferences(),browser=BrowserModel(preferences:preferences),origin=try origin()
+        try attach(browser)
+        defer { browser.webView.stopLoading();browser.webView.removeFromSuperview();defaults.removePersistentDomain(forName:name) }
+        var requests=0;browser.onUserPlayback={ _ in requests+=1 }
+        browser.open(origin.appendingPathComponent("empty-test"))
+        try await wait { browser.pageHTTPStatus==200 && !browser.isLoading }
+        _ = try await browser.webView.callAsyncJavaScript("""
+            document.body.innerHTML='<canvas style="width:640px;height:320px"></canvas><button aria-label="Enter VR" style="width:32px;height:32px;padding:0">VR</button>';
+            await fetch('vr180-sbs.mp4',{headers:{Range:'bytes=0-1023'}}).then(response=>response.arrayBuffer());
+            globalThis.visionStreamDetector.scan();return true;
+            """,arguments:[:],in:nil,contentWorld:.defaultClient)
+        try await wait { AutomaticPlayback.detected(in:browser.candidates).contains { $0.webMedia?.canvasBacked==true } }
+        XCTAssertTrue(AutomaticPlayback.actionable(in:browser.candidates).isEmpty)
+        XCTAssertEqual(requests,0)
+        XCTAssertTrue(browser.candidates.allSatisfy { $0.playIntent==nil && $0.source.isEmpty })
+    }
+
     /// Test the real isolated bridge/native handoff boundary, not simulated human
     /// input. The JS unit tests cover trusted-gesture recognition separately.
     private func inject(_ browser:BrowserModel,id:String) async throws {

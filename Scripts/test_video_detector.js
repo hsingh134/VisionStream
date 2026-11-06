@@ -6,7 +6,7 @@ function fixture() {
   let now=1000,serial=0;
   const listeners={},windowListeners={},reports=[];
   class Element {
-    constructor(kind='div') { this.events={};this.kind=kind;this.hidden=false;this.ad=false;this.rect={left:0,top:0,right:640,bottom:360,width:640,height:360}; }
+    constructor(kind='div') { this.events={};this.kind=kind;this.tagName=kind.toUpperCase();this.textContent='';this.hidden=false;this.ad=false;this.rect={left:0,top:0,right:640,bottom:360,width:640,height:360}; }
     closest(selector) {
       if (this.kind==='input' && selector.includes('textarea')) return this;
       if (this.ad && selector.includes('data-ad-slot')) return this;
@@ -31,7 +31,7 @@ function fixture() {
   context.window=context;context.addEventListener=(name,action)=>{windowListeners[name]=action};
   vm.runInContext(source,context);
   function event(type='click',values={}) { const target=values.target||overlay;listeners[type]({type,isTrusted:true,repeat:false,clientX:100,clientY:100,key:' ',target,composedPath:()=>[target,body],...values}); }
-  return {video,document,body,overlay,diagnostics:()=>context.visionStreamDetector.diagnostics(),error:values=>windowListeners.error(values),input:new Element('input'),event,reports,scan:()=>context.visionStreamDetector.scan()[0],advance:ms=>{now+=ms;}};
+  return {Element,context,video,document,body,overlay,diagnostics:()=>context.visionStreamDetector.diagnostics(),error:values=>windowListeners.error(values),input:new Element('input'),event,reports,scan:()=>context.visionStreamDetector.scan()[0],advance:ms=>{now+=ms;}};
 }
 let passed=0;
 function test(name,run) { run();passed++;process.stdout.write('PASS '+name+'\n'); }
@@ -60,5 +60,33 @@ test('diagnostic observations are bounded and do not alter playback',()=>{
   assert.equal(state.scriptErrors[0].name,'TypeError');assert.ok(state.observedAtMs>1700000000000);
   assert.equal(JSON.stringify(state).includes('PRIVATE_ERROR_CONTENT'),false);
   assert.equal(f.video.currentSrc,source);assert.equal(f.video.paused,false);assert.equal(f.video.currentTime,7);
+});
+test('hidden texture video associates only a single visible canvas inside its player',()=>{
+  const f=fixture(),canvas=new f.Element('canvas');canvas.style={display:'block',visibility:'visible',opacity:'1'};
+  const player={querySelectorAll:q=>q==='video'?[f.video]:q==='canvas'?[canvas]:[],contains:n=>[f.video,canvas,f.overlay].includes(n)};
+  f.video.player=player;f.overlay.player=player;f.video.hidden=true;
+  f.video.currentSrc='blob:https://page.example/local';f.event();f.video.paused=false;
+  const media=f.scan();assert.equal(media.webMedia.canvasBacked,true);assert.equal(media.playIntent.visible,true);
+  assert.equal(media.source,'blob:https://page.example/local');assert.equal(media.webMedia.adMarked,false);
+  f.video.mediaKeys={};assert.equal(f.scan().encrypted,true);
+});
+test('detached decoder requires visible VR canvas and a media request; never invents autoplay or a stream',()=>{
+  const f=fixture(),canvas=new f.Element('canvas'),button=new f.Element('button');
+  canvas.style=button.style={display:'block',visibility:'visible',opacity:'1'};button.textContent='Enter VR';
+  button.rect={left:4,top:4,right:36,bottom:36,width:32,height:32};
+  f.document.querySelectorAll=q=>q==='canvas'?[canvas]:q.startsWith('button')?[button]:[];
+  assert.equal(f.scan(),undefined);
+  f.context.URL=URL;f.context.performance.getEntriesByType=()=>[{name:'https://media.example/scene.m3u8',initiatorType:'fetch'}];
+  const media=f.scan();assert.equal(media.source,'');assert.equal(media.webMedia.canvasBacked,true);assert.equal(media.playIntent,null);assert.equal(media.webMedia.readyState,0);
+  button.textContent='Privacy';assert.equal(f.scan(),undefined);
+  button.textContent='VR';button.hidden=true;assert.equal(f.scan(),undefined);
+  button.hidden=false;button.rect.width=0;assert.equal(f.scan(),undefined);
+});
+test('an unrelated advert video does not hide detached XR source discovery',()=>{
+  const f=fixture(),canvas=new f.Element('canvas'),button=new f.Element('button');
+  canvas.style=button.style={display:'block',visibility:'visible',opacity:'1'};button.textContent='VR';f.video.ad=true;
+  f.document.querySelectorAll=q=>q==='video'?[f.video]:q==='canvas'?[canvas]:q.startsWith('button')?[button]:[];
+  f.context.URL=URL;f.context.performance.getEntriesByType=()=>[{name:'https://media.example/scene.mp4',initiatorType:'video'}];
+  assert.equal(f.scan().source,'');assert.equal(f.scan().playIntent,null);
 });
 process.stdout.write(`${passed} detector unit tests; 0 failures\n`);
